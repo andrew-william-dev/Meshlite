@@ -47,6 +47,7 @@ type IssuedCert struct {
 	ClusterID    string
 	Namespace    string
 	CertPEM      []byte
+	KeyPEM       []byte // non-nil only when returned by IssueWithDNS
 	RootCAPEM    []byte
 	ExpiresAt    time.Time
 	RotateAt     time.Time
@@ -162,6 +163,79 @@ func (c *CA) Issue(serviceID, clusterID, namespace string) (*IssuedCert, error) 
 		ClusterID:    clusterID,
 		Namespace:    namespace,
 		CertPEM:      certPEM,
+		RootCAPEM:    c.rootPEM,
+		ExpiresAt:    expiry,
+		RotateAt:     rotateAtTime,
+		SerialNumber: serial.String(),
+	}, nil
+}
+
+// IssueWithDNS issues a leaf certificate like Issue, but also sets DNS SANs.
+// It returns the certificate AND the leaf private key PEM so the caller can
+// use them directly as a TLS credential (e.g. for the Sigil gRPC server).
+func (c *CA) IssueWithDNS(serviceID, clusterID, namespace string, dnsNames []string) (*IssuedCert, error) {
+	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
+	if err != nil {
+		return nil, fmt.Errorf("ca: generate serial: %w", err)
+	}
+
+	spiffeURI := buildSPIFFEURI(clusterID, namespace, serviceID)
+	u, err := url.Parse(spiffeURI)
+	if err != nil {
+		return nil, fmt.Errorf("ca: parse spiffe URI: %w", err)
+	}
+
+	leafKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return nil, fmt.Errorf("ca: generate leaf key: %w", err)
+	}
+
+	now := time.Now()
+	expiry := now.Add(c.leafTTL)
+	rotateAtTime := now.Add(time.Duration(float64(c.leafTTL) * rotateAt))
+
+	tmpl := &x509.Certificate{
+		SerialNumber: serial,
+		Subject: pkix.Name{
+			CommonName:   serviceID,
+			Organization: []string{"MeshLite"},
+		},
+		URIs:      []*url.URL{u},
+		DNSNames:  dnsNames,
+		NotBefore: now,
+		NotAfter:  expiry,
+		KeyUsage:  x509.KeyUsageDigitalSignature,
+		ExtKeyUsage: []x509.ExtKeyUsage{
+			x509.ExtKeyUsageClientAuth,
+			x509.ExtKeyUsageServerAuth,
+		},
+		BasicConstraintsValid: true,
+		IsCA:                  false,
+	}
+
+	certDER, err := x509.CreateCertificate(rand.Reader, tmpl, c.rootCert, &leafKey.PublicKey, c.rootKey)
+	if err != nil {
+		return nil, fmt.Errorf("ca: sign leaf cert: %w", err)
+	}
+
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
+
+	keyDER, err := x509.MarshalECPrivateKey(leafKey)
+	if err != nil {
+		return nil, fmt.Errorf("ca: marshal leaf key: %w", err)
+	}
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER})
+
+	if err := c.persistCert(serial.String(), serviceID, clusterID, namespace, certPEM, expiry, rotateAtTime); err != nil {
+		return nil, fmt.Errorf("ca: persist cert: %w", err)
+	}
+
+	return &IssuedCert{
+		ServiceID:    serviceID,
+		ClusterID:    clusterID,
+		Namespace:    namespace,
+		CertPEM:      certPEM,
+		KeyPEM:       keyPEM,
 		RootCAPEM:    c.rootPEM,
 		ExpiresAt:    expiry,
 		RotateAt:     rotateAtTime,

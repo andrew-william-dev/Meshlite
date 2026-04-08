@@ -72,15 +72,19 @@ func New(logger *slog.Logger) *Distributor {
 
 // ListenAndServe starts the gRPC server on addr (e.g. ":8443").
 // It blocks until ctx is cancelled or a fatal error occurs.
-func (d *Distributor) ListenAndServe(ctx context.Context, addr string) error {
+// Extra grpc.ServerOption values (e.g. TLS credentials) may be passed via opts.
+func (d *Distributor) ListenAndServe(ctx context.Context, addr string, opts ...grpc.ServerOption) error {
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
 		return fmt.Errorf("distributor: listen %s: %w", addr, err)
 	}
 
-	srv := grpc.NewServer(grpc.KeepaliveParams(keepalive.ServerParameters{
-		MaxConnectionIdle: 5 * 60, // 5 minutes
-	}))
+	srvOpts := append([]grpc.ServerOption{
+		grpc.KeepaliveParams(keepalive.ServerParameters{
+			MaxConnectionIdle: 5 * 60, // 5 minutes
+		}),
+	}, opts...)
+	srv := grpc.NewServer(srvOpts...)
 	sigilv1.RegisterSigilAgentServer(srv, d)
 
 	go func() {

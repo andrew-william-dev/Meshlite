@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -21,6 +22,8 @@ import (
 	"github.com/meshlite/sigil/internal/policy"
 	"github.com/meshlite/sigil/internal/registry"
 	sigilv1 "github.com/meshlite/sigil/internal/proto"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
@@ -77,6 +80,35 @@ func main() {
 
 	// ── Distributor ────────────────────────────────────────────────────────────
 	dist := distributor.New(logger)
+
+	// Issue a server-side TLS cert for the Sigil gRPC listener.
+	// The cert covers all DNS names agents might use to reach Sigil.
+	serverCert, err := authority.IssueWithDNS("sigil", eng.ClusterID(), "meshlite-system", []string{
+		"sigil.meshlite-system.svc.cluster.local",
+		"sigil.meshlite-system.svc",
+		"sigil.meshlite-system",
+		"sigil",
+		"localhost",
+	})
+	if err != nil {
+		logger.Error("failed to issue Sigil server TLS cert", "err", err)
+		os.Exit(1)
+	}
+	tlsCert, err := tls.X509KeyPair(serverCert.CertPEM, serverCert.KeyPEM)
+	if err != nil {
+		logger.Error("failed to build TLS key pair", "err", err)
+		os.Exit(1)
+	}
+	tlsCfg := &tls.Config{
+		Certificates: []tls.Certificate{tlsCert},
+		// RequestClientCert allows plaintext bootstrap (kprobe Bootstrap state)
+		// AND mTLS clients (kprobe ConnectedTLS state); it does not require a
+		// client cert, so the Bootstrap → cert-issue round-trip still works.
+		ClientAuth: tls.RequestClientCert,
+		MinVersion: tls.VersionTLS12,
+	}
+	grpcTLSOpt := credentials.NewTLS(tlsCfg)
+	logger.Info("Sigil TLS ready", "dns_names", serverCert.CertPEM[:0])
 
 	// On connect: push the current policy snapshot + issue certs for every service
 	// the agent declared in its hello. This ensures agents get data immediately
@@ -192,7 +224,7 @@ func main() {
 	}()
 
 	go func() {
-		if err := dist.ListenAndServe(ctx, *grpcAddr); err != nil {
+		if err := dist.ListenAndServe(ctx, *grpcAddr, grpc.Creds(grpcTLSOpt)); err != nil {
 			errCh <- fmt.Errorf("grpc: %w", err)
 		}
 	}()

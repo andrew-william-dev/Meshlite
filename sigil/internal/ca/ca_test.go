@@ -262,6 +262,47 @@ func TestBuildSPIFFEURI(t *testing.T) {
 	}
 }
 
+func TestIssueWithDNS_HasDNSSANsAndKey(t *testing.T) {
+	c := newTestCA(t, 0)
+	dnsNames := []string{"sigil.meshlite-system.svc.cluster.local", "sigil", "localhost"}
+
+	issued, err := c.IssueWithDNS("sigil", "dev", "meshlite-system", dnsNames)
+	if err != nil {
+		t.Fatalf("IssueWithDNS: %v", err)
+	}
+
+	// Key PEM must be present.
+	if len(issued.KeyPEM) == 0 {
+		t.Fatal("KeyPEM is empty")
+	}
+	block, _ := pem.Decode(issued.KeyPEM)
+	if block == nil || block.Type != "EC PRIVATE KEY" {
+		t.Fatalf("unexpected KeyPEM block type: %v", block)
+	}
+
+	// Cert must contain the expected DNS SANs.
+	certBlock, _ := pem.Decode(issued.CertPEM)
+	if certBlock == nil {
+		t.Fatal("CertPEM did not decode")
+	}
+	cert, err := x509.ParseCertificate(certBlock.Bytes)
+	if err != nil {
+		t.Fatalf("parse cert: %v", err)
+	}
+	for _, want := range dnsNames {
+		found := false
+		for _, got := range cert.DNSNames {
+			if got == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("DNS SAN %q not found in cert; got %v", want, cert.DNSNames)
+		}
+	}
+}
+
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
 func containsServiceID(certs []IssuedCert, id string) bool {
