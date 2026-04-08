@@ -3,22 +3,29 @@
 
 use aya_ebpf::{
     macros::{classifier, map},
-    maps::PerfEventArray,
+    maps::{Array, HashMap, PerfEventArray},
     programs::TcContext,
 };
 
-// TC action: pass the packet through unchanged.
-const TC_ACT_OK: i32 = 0;
+// TC actions.
+const TC_ACT_OK:   i32 = 0; // pass packet through
+const TC_ACT_SHOT: i32 = 2; // drop packet
 
-// ─── Shared type ─────────────────────────────────────────────────────────────
+// ─── Pod CIDR guard ───────────────────────────────────────────────────────────
 //
-// PacketLog is the record written into the perf event ring buffer for every
-// intercepted IPv4 TCP/UDP packet. The userspace loader reads these records
-// and prints them to stdout.
+// Only consult VERDICT_MAP for traffic whose source IP is in the pod CIDR.
+// kind assigns pod IPs from 10.244.0.0/16. Node traffic (172.18.0.0/16) must
+// always pass to avoid disrupting kubelet heartbeats.
 //
-// MUST be #[repr(C)] so the in-memory layout is identical on both sides of
-// the kernel/userspace boundary. The userspace crate redeclares this struct
-// with the same layout.
+// Stored in network byte order — 0x0AF40000 == 10.244.0.0 big-endian.
+const POD_CIDR_NET:  u32 = 0x0AF40000_u32.to_be(); // 10.244.0.0
+const POD_CIDR_MASK: u32 = 0xFFFF0000_u32.to_be(); // /16
+
+// ─── Shared types ─────────────────────────────────────────────────────────────
+//
+// PacketLog and PacketKey are #[repr(C)] so their in-memory layout is identical
+// on both sides of the kernel/userspace boundary. The userspace crate redeclares
+// these structs with the same layout.
 //
 // Phase 1 assumes a standard 20-byte IPv4 header (no IP options). This is
 // correct for pod-to-pod traffic inside Kubernetes — the CNI never generates
@@ -32,16 +39,34 @@ pub struct PacketLog {
     pub src_port: u16, // host byte order
     pub dst_port: u16, // host byte order
     pub proto:    u8,  // 6 = TCP, 17 = UDP
-    pub _pad:     u8,  // explicit padding — keeps the struct layout stable
+    pub verdict:  u8,  // 0 = ALLOW, 1 = DENY (replaces _pad from Phase 1)
 }
 
-// ─── BPF map ─────────────────────────────────────────────────────────────────
-//
-// Perf event array: kernel side writes PacketLog records; userspace reads them
-// via an async poll loop. 1024 entries is more than sufficient for Phase 1 PoC.
+// PacketKey is the key type for VERDICT_MAP.
+// Both fields are in network byte order, matching what ctx.load() returns.
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct PacketKey {
+    pub src_ip: u32, // network byte order
+    pub dst_ip: u32, // network byte order
+}
 
+// ─── BPF maps ─────────────────────────────────────────────────────────────────
+
+// Perf event array: kernel side writes PacketLog records; userspace reads them.
 #[map]
 static PACKET_EVENTS: PerfEventArray<PacketLog> = PerfEventArray::new(0);
+
+// Verdict map: userspace writes allow/deny decisions per (src_ip, dst_ip) pair.
+// Value: 0 = ALLOW, 1 = DENY.
+// Capacity 4096 supports up to 4096 distinct src→dst pod IP pairs.
+#[map]
+static VERDICT_MAP: HashMap<PacketKey, u8> = HashMap::with_max_entries(4096, 0);
+
+// Policy flags: [0] = default_allow (0 = deny-unmatched, 1 = allow-unmatched).
+// Userspace writes this once after every PolicyBundle push.
+#[map]
+static POLICY_FLAGS: Array<u32> = Array::with_max_entries(1, 0);
 
 // ─── TC classifier ───────────────────────────────────────────────────────────
 //
@@ -51,7 +76,7 @@ static PACKET_EVENTS: PerfEventArray<PacketLog> = PerfEventArray::new(0);
 #[classifier]
 pub fn kprobe_egress(ctx: TcContext) -> i32 {
     // Safety first: if anything goes wrong during parsing, pass the packet
-    // through unchanged. We never drop a packet in Phase 1.
+    // through unchanged. We never drop a packet on parse error.
     match try_intercept(&ctx) {
         Ok(action) => action,
         Err(_)     => TC_ACT_OK,
@@ -86,7 +111,7 @@ fn try_intercept(ctx: &TcContext) -> Result<i32, ()> {
         return Ok(TC_ACT_OK);
     }
 
-    // 3. Read source and destination IP addresses.
+    // 3. Read source and destination IP addresses (network byte order).
     let src_ip: u32 = ctx.load(26).map_err(|_| ())?;
     let dst_ip: u32 = ctx.load(30).map_err(|_| ())?;
 
@@ -96,20 +121,38 @@ fn try_intercept(ctx: &TcContext) -> Result<i32, ()> {
     let src_port_be: u16 = ctx.load(34).map_err(|_| ())?;
     let dst_port_be: u16 = ctx.load(36).map_err(|_| ())?;
 
-    // 5. Build the log record and write it to the perf event ring buffer.
+    // 5. Verdict decision — only for traffic originating from the pod CIDR.
+    //    Node traffic (kubelet heartbeats, etc.) always passes through.
+    let verdict: u8 = if src_ip & POD_CIDR_MASK == POD_CIDR_NET {
+        let key = PacketKey { src_ip, dst_ip };
+        match unsafe { VERDICT_MAP.get(&key) } {
+            Some(v) => *v,     // explicit allow (0) or deny (1)
+            None => {
+                // No explicit verdict — consult default_allow flag.
+                match POLICY_FLAGS.get(0) {
+                    Some(flag) if *flag == 0 => 1, // deny-unmatched
+                    _                        => 0, // allow-unmatched (default while map is empty on startup)
+                }
+            }
+        }
+    } else {
+        0 // non-pod traffic always allowed
+    };
+
+    let action = if verdict == 1 { TC_ACT_SHOT } else { TC_ACT_OK };
+
+    // 6. Write the log record to the perf event ring buffer.
     let log = PacketLog {
         src_ip,
         dst_ip,
         src_port: u16::from_be(src_port_be),
         dst_port: u16::from_be(dst_port_be),
         proto,
-        _pad: 0,
+        verdict,
     };
-
     PACKET_EVENTS.output(ctx, &log, 0);
 
-    // 6. Always pass the packet through — Phase 1 never drops anything.
-    Ok(TC_ACT_OK)
+    Ok(action)
 }
 
 // ─── Panic handler ───────────────────────────────────────────────────────────
