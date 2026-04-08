@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "sigil.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: sigil
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    app: sigil
+  ports:
+    - name: grpc
+      port: {{ .Values.service.grpcPort }}
+      targetPort: grpc
+    - name: http
+      port: {{ .Values.service.httpPort }}
+      targetPort: http

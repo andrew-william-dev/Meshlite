@@ -1,0 +1,6 @@
+[toolchain]
+channel = "nightly"
+# rust-src is required for build-std = ["core"] used by kprobe-ebpf.
+# bpfel-unknown-none is NOT a pre-built rustup target — it is compiled
+# from source via build-std, so it must NOT appear in the targets list.
+components = ["rust-src", "rustfmt", "clippy"]

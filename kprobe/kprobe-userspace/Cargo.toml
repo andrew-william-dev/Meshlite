@@ -1,0 +1,24 @@
+[package]
+name = "kprobe-userspace"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Aya userspace — loads and manages eBPF programs
+aya = { version = "0.13", features = ["async_tokio"] }
+aya-log = "0.2"
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Buffer type used when reading perf event records
+bytes = "1"
+
+# Error handling and logging
+anyhow = "1"
+log = "0.4"
+env_logger = "0.11"
+
+[[bin]]
+name = "kprobe-loader"
+path = "src/main.rs"

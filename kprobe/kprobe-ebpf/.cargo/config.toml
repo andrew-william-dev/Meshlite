@@ -1,0 +1,7 @@
+# Build the eBPF crate for the BPF Little-Endian target.
+# This file is scoped to kprobe-ebpf only — kprobe-userspace uses the host target.
+[build]
+target = "bpfel-unknown-none"
+
+[unstable]
+build-std = ["core"]

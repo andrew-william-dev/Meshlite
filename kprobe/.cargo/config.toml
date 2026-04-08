@@ -1,0 +1,9 @@
+# Workspace-level Cargo config.
+# Routes the host (Windows) target to the GNU toolchain via MinGW64,
+# avoiding the requirement for Visual Studio / MSVC link.exe.
+# The kprobe-ebpf crate has its own .cargo/config.toml that overrides the
+# target to bpfel-unknown-none for the eBPF build.
+
+[target.x86_64-pc-windows-gnu]
+linker = "C:\\msys64\\mingw64\\bin\\gcc.exe"
+ar     = "C:\\msys64\\mingw64\\bin\\ar.exe"

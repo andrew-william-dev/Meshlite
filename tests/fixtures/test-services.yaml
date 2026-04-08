@@ -1,0 +1,163 @@
+# Phase 1 test subjects — used throughout all phases.
+#
+# Two minimal HTTP servers. Services expose them by name so that
+# `curl http://service-beta:8080` resolves correctly inside the cluster.
+# Both pods run busybox httpd — ~5MB image, pulls instantly, wget built in.
+# This replaces python:3.11 which is ~350MB and lacks curl/wget in slim variant.
+#
+# Apply with:
+#   kubectl apply -f tests/fixtures/test-services.yaml
+#
+# Remove with:
+#   kubectl delete -f tests/fixtures/test-services.yaml
+
+---
+# ── Namespace ──────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: meshlite-test
+  labels:
+    app.kubernetes.io/managed-by: meshlite
+
+---
+# ── service-alpha Deployment ───────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-alpha
+  namespace: meshlite-test
+  labels:
+    app: service-alpha
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: service-alpha
+  template:
+    metadata:
+      labels:
+        app: service-alpha
+        # Identity label — used by Sigil in Phase 2 to map pod → service name.
+        meshlite.io/service: service-alpha
+    spec:
+      # Force service-alpha and service-beta onto different worker nodes.
+      # This ensures pod-to-pod traffic crosses eth0, making it visible to the
+      # TC egress eBPF hook. Without this, both pods may land on the same node
+      # and traffic stays on the local CNI bridge, bypassing eth0 entirely.
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values: [service-beta]
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: server
+          image: busybox:1.36
+          command: ["sh", "-c", "mkdir -p /www && echo 'service-alpha OK' > /www/index.html && httpd -f -p 8080 -h /www"]
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          # Minimal resource bounds so the pod fits on a single-node kind cluster.
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "32Mi"
+            limits:
+              cpu: "200m"
+              memory: "64Mi"
+          # Liveness probe — confirms the HTTP server started correctly.
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+---
+# ── service-alpha Service ──────────────────────────────────────────────────────
+# Required so that `curl http://service-alpha:8080` resolves inside the cluster.
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-alpha
+  namespace: meshlite-test
+  labels:
+    app: service-alpha
+spec:
+  selector:
+    app: service-alpha
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+
+---
+# ── service-beta Deployment ────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-beta
+  namespace: meshlite-test
+  labels:
+    app: service-beta
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: service-beta
+  template:
+    metadata:
+      labels:
+        app: service-beta
+        meshlite.io/service: service-beta
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values: [service-alpha]
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: server
+          image: busybox:1.36
+          command: ["sh", "-c", "mkdir -p /www && echo 'service-beta OK' > /www/index.html && httpd -f -p 8080 -h /www"]
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "32Mi"
+            limits:
+              cpu: "200m"
+              memory: "64Mi"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+---
+# ── service-beta Service ───────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-beta
+  namespace: meshlite-test
+  labels:
+    app: service-beta
+spec:
+  selector:
+    app: service-beta
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP

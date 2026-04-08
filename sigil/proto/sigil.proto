@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package sigil.v1;
+
+option go_package = "github.com/meshlite/sigil/internal/proto;sigilv1";
+
+// ─── Messages ─────────────────────────────────────────────────────────────────
+
+// CertBundle is pushed to a Kprobe agent whenever a cert is issued or rotated.
+message CertBundle {
+  string service_id       = 1; // e.g. "service-alpha"
+  bytes  service_cert_pem = 2; // x509 leaf cert in PEM format
+  bytes  root_ca_pem      = 3; // Sigil root CA cert in PEM format
+  int64  expires_at_unix  = 4; // Unix timestamp of leaf cert expiry
+  int64  rotate_at_unix   = 5; // Proactive rotation hint (expires_at - 20%)
+}
+
+// PolicyBundle is pushed to all connected agents on config change.
+message PolicyBundle {
+  repeated AllowRule rules         = 1;
+  bool               default_allow = 2;
+  string             mtls_mode     = 3; // "enforce" | "permissive" | "off"
+}
+
+message AllowRule {
+  string          from_service = 1;
+  repeated string to_services  = 2;
+}
+
+// AgentHello is the first message sent by a Kprobe agent on connect.
+message AgentHello {
+  string          node_id         = 1;
+  string          cluster_id      = 2;
+  repeated string pod_service_ids = 3; // service IDs currently running on this node
+}
+
+// AgentPush is streamed from Sigil to the agent.
+message AgentPush {
+  oneof payload {
+    CertBundle   cert   = 1;
+    PolicyBundle policy = 2;
+  }
+}
+
+// AgentAck acknowledges receipt of a pushed bundle.
+message AgentAck {
+  string stream_id   = 1;
+  int64  received_at = 2; // Unix timestamp
+}
+
+message AckResponse {
+  bool ok = 1;
+}
+
+// ─── Service ──────────────────────────────────────────────────────────────────
+
+// SigilAgent is the persistent streaming RPC used by Kprobe agents.
+service SigilAgent {
+  // Connect opens a server-streaming channel. Sigil pushes certs and policy
+  // as they change. The agent calls this once on startup and holds it open.
+  rpc Connect(AgentHello) returns (stream AgentPush);
+
+  // Ack acknowledges receipt of a pushed bundle (for delivery tracking).
+  rpc Ack(AgentAck) returns (AckResponse);
+}

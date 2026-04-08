@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "kprobe-ebpf",
+    "kprobe-userspace",
+]
+resolver = "2"

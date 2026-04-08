@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sigil.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: sigil
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: sigil
+  template:
+    metadata:
+      labels:
+        app: sigil
+    spec:
+      serviceAccountName: {{ include "sigil.fullname" . }}
+      containers:
+        - name: sigil
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - --config=/config/{{ .Values.config.meshConfigKey }}
+            - --db={{ .Values.persistence.mountPath }}/sigil.db
+            - --root-key={{ .Values.persistence.mountPath }}/root.key
+            - --root-cert={{ .Values.persistence.mountPath }}/root.crt
+            - --grpc-addr=:{{ .Values.service.grpcPort }}
+            - --http-addr=:{{ .Values.service.httpPort }}
+          ports:
+            - name: grpc
+              containerPort: {{ .Values.service.grpcPort }}
+            - name: http
+              containerPort: {{ .Values.service.httpPort }}
+          volumeMounts:
+            - name: data
+              mountPath: {{ .Values.persistence.mountPath }}
+            - name: config
+              mountPath: /config
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "sigil.fullname" . }}-data
+        - name: config
+          configMap:
+            name: {{ .Values.config.meshConfigMap }}

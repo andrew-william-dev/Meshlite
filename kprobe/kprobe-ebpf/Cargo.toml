@@ -1,0 +1,19 @@
+[package]
+name = "kprobe-ebpf"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+aya-ebpf = "0.1"
+aya-log-ebpf = "0.1"
+
+[[bin]]
+name = "kprobe-ebpf"
+path = "src/main.rs"
+
+# eBPF programs benefit from optimisation even in dev builds
+[profile.dev]
+opt-level = 2
+
+[profile.release]
+lto = true

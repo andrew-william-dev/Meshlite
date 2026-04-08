@@ -1,0 +1,20 @@
+# One-way mesh config used in Test 2.C to verify config reload and policy push.
+# Contains a single allow rule (vs 3 in mesh-basic.yaml) so the rule count
+# change is visible in the fake-agent output after POST /api/v1/config.
+
+mesh:
+  name: meshlite-dev
+  cluster_id: dev
+
+services:
+  - name: service-alpha
+    namespace: meshlite-test
+  - name: service-beta
+    namespace: meshlite-test
+
+policy:
+  mtls: enforce
+  default_allow: false
+  allow:
+    - from: service-alpha
+      to: [service-beta]

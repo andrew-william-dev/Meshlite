@@ -1,0 +1,49 @@
+replicaCount: 1
+
+image:
+  repository: meshlite/sigil
+  pullPolicy: IfNotPresent
+  tag: "phase2"
+
+nameOverride: ""
+fullnameOverride: ""
+
+service:
+  type: ClusterIP
+  grpcPort: 8443
+  httpPort: 8080
+
+# Path to the mesh.yaml ConfigMap key mounted into the pod
+config:
+  meshConfigMap: sigil-mesh-config
+  meshConfigKey: mesh.yaml
+
+# PersistentVolume for SQLite database and root CA key
+persistence:
+  enabled: true
+  storageClass: ""
+  accessMode: ReadWriteOnce
+  size: 1Gi
+  mountPath: /data
+
+resources:
+  limits:
+    memory: 128Mi
+    cpu: 250m
+  requests:
+    memory: 64Mi
+    cpu: 50m
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8080
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: 8080
+  initialDelaySeconds: 3
+  periodSeconds: 5

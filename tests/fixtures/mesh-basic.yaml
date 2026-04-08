@@ -1,0 +1,38 @@
+# Basic mesh config used in Phase 2 policy engine unit tests (Test 2.B)
+# and as the starting point for all integration tests.
+#
+# Apply to a running Sigil with:
+#   meshctl apply -f tests/fixtures/mesh-basic.yaml
+
+mesh:
+  name: meshlite-dev
+  cluster_id: dev
+
+services:
+  - name: service-alpha
+    namespace: meshlite-test
+  - name: service-beta
+    namespace: meshlite-test
+  - name: api-gateway
+    namespace: meshlite-test
+  - name: auth
+    namespace: meshlite-test
+  - name: orders
+    namespace: meshlite-test
+  - name: payments
+    namespace: meshlite-test
+
+policy:
+  mtls: enforce
+  default_allow: false
+  allow:
+    - from: api-gateway
+      to: [auth, orders]
+    - from: orders
+      to: [payments]
+    - from: service-alpha
+      to: [service-beta]
+
+observability:
+  export: prometheus
+  latency_buckets: [1, 5, 10, 25, 50, 100, 250, 500]
