@@ -80,32 +80,32 @@ impl PodWatcher {
             match event {
                 Ok(Event::Apply(pod)) | Ok(Event::InitApply(pod)) => {
                     if let Some((svc_id, ip)) = extract_service_and_ip(&pod) {
-                        let mut snap = snapshot.lock().unwrap();
-                        snap.entry(svc_id).or_default().push(ip);
-                        // De-duplicate IPs.
-                        snap.values_mut().for_each(|v| { v.sort(); v.dedup(); });
-                        drop(snap);
+                        {
+                            let mut snap = snapshot.lock().unwrap();
+                            snap.entry(svc_id).or_default().push(ip);
+                            // De-duplicate IPs.
+                            snap.values_mut().for_each(|v| { v.sort(); v.dedup(); });
+                        } // guard dropped here — before .await
                         let _ = tx.send(PodEvent::Changed).await;
                     }
                 }
                 Ok(Event::Delete(pod)) => {
                     if let Some((svc_id, ip)) = extract_service_and_ip(&pod) {
-                        let mut snap = snapshot.lock().unwrap();
-                        if let Some(ips) = snap.get_mut(&svc_id) {
-                            ips.retain(|i| *i != ip);
-                            if ips.is_empty() {
-                                snap.remove(&svc_id);
+                        {
+                            let mut snap = snapshot.lock().unwrap();
+                            if let Some(ips) = snap.get_mut(&svc_id) {
+                                ips.retain(|i| *i != ip);
+                                if ips.is_empty() {
+                                    snap.remove(&svc_id);
+                                }
                             }
-                        }
-                        drop(snap);
+                        } // guard dropped here — before .await
                         let _ = tx.send(PodEvent::Changed).await;
                     }
                 }
                 Ok(Event::Init) => {
                     // Watcher restarted — clear snapshot and rebuild.
-                    let mut snap = snapshot.lock().unwrap();
-                    snap.clear();
-                    drop(snap);
+                    snapshot.lock().unwrap().clear();
                 }
                 Ok(Event::InitDone) => {
                     // Initial list complete — trigger a sync.

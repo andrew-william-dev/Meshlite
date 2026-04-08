@@ -18,6 +18,16 @@ pub struct PolicyCache {
     pub mtls_mode: String,
 }
 
+impl Clone for PolicyCache {
+    fn clone(&self) -> Self {
+        Self {
+            rules:         self.rules.clone(),
+            default_allow: self.default_allow,
+            mtls_mode:     self.mtls_mode.clone(),
+        }
+    }
+}
+
 impl PolicyCache {
     pub fn new() -> Self {
         // Safe default while waiting for first PolicyBundle: allow everything so
