@@ -1,0 +1,38 @@
+# ─── Rust build output ────────────────────────────────────────────────────────
+**/target/
+**/*.rs.bk
+
+# ─── Go build output ─────────────────────────────────────────────────────────
+sigil/sigil
+sigil/*.test
+meshctl/meshctl
+conduit/conduit
+trace/backend/*.test
+
+# ─── Docker ───────────────────────────────────────────────────────────────────
+.dockerignore
+
+# ─── Kubernetes / Helm ────────────────────────────────────────────────────────
+*.kubeconfig
+*-kubeconfig.yaml
+charts/**/charts/        # unpacked chart dependencies
+charts/**/Chart.lock
+
+# ─── OS & editor ─────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+*~
+.idea/
+.vscode/settings.json
+*.code-workspace
+
+# ─── Secrets & local config ──────────────────────────────────────────────────
+*.pem
+*.key
+*.crt
+!tests/fixtures/**/*.pem   # test fixtures may contain example certs
+.env
+.env.*
