@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "kprobe.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: kprobe
+spec:
+  selector:
+    matchLabels:
+      app: kprobe
+  template:
+    metadata:
+      labels:
+        app: kprobe
+    spec:
+      serviceAccountName: {{ include "kprobe.fullname" . }}
+      tolerations:
+        # Run on all nodes including control-plane.
+        - operator: Exists
+      hostPID: false
+      hostNetwork: false
+      containers:
+        - name: kprobe
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - --iface=$(IFACE)
+            - --ebpf-path=$(EBPF_PATH)
+            - --sigil-addr=$(SIGIL_ADDR)
+            - --node-id=$(NODE_NAME)
+            - --cluster-id=$(CLUSTER_ID)
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: IFACE
+              value: {{ .Values.ebpf.iface | quote }}
+            - name: EBPF_PATH
+              value: {{ .Values.ebpf.path | quote }}
+            - name: SIGIL_ADDR
+              value: {{ .Values.sigil.addr | quote }}
+            - name: CLUSTER_ID
+              value: {{ .Values.cluster.id | quote }}
+          securityContext:
+            privileged: true
+            capabilities:
+              add:
+                - SYS_ADMIN
+                - NET_ADMIN
+                - SYS_RESOURCE

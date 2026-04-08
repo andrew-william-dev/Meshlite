@@ -1,0 +1,14 @@
+image:
+  repository: meshlite/kprobe
+  pullPolicy: IfNotPresent
+  tag: "phase3"
+
+sigil:
+  addr: "sigil.meshlite-system.svc.cluster.local:8443"
+
+cluster:
+  id: "dev"
+
+ebpf:
+  iface: "eth0"
+  path: "/app/kprobe-ebpf"

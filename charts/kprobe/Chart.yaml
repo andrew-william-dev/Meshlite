@@ -1,0 +1,6 @@
+apiVersion: v2
+name: kprobe
+description: Kprobe — MeshLite eBPF Enforcer DaemonSet
+type: application
+version: 0.1.0
+appVersion: "phase3"
