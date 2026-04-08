@@ -3,7 +3,7 @@ replicaCount: 1
 image:
   repository: meshlite/sigil
   pullPolicy: IfNotPresent
-  tag: "phase2"
+  tag: "phase3"
 
 nameOverride: ""
 fullnameOverride: ""
