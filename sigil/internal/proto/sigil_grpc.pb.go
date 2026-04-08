@@ -19,8 +19,8 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	SigilAgent_Connect_FullMethodName = "/sigil.v1.SigilAgent/Connect"
-	SigilAgent_Ack_FullMethodName     = "/sigil.v1.SigilAgent/Ack"
+	SigilAgent_Subscribe_FullMethodName = "/sigil.v1.SigilAgent/Subscribe"
+	SigilAgent_Ack_FullMethodName       = "/sigil.v1.SigilAgent/Ack"
 )
 
 // SigilAgentClient is the client API for SigilAgent service.
@@ -29,9 +29,9 @@ const (
 //
 // SigilAgent is the persistent streaming RPC used by Kprobe agents.
 type SigilAgentClient interface {
-	// Connect opens a server-streaming channel. Sigil pushes certs and policy
+	// Subscribe opens a server-streaming channel. Sigil pushes certs and policy
 	// as they change. The agent calls this once on startup and holds it open.
-	Connect(ctx context.Context, in *AgentHello, opts ...grpc.CallOption) (grpc.ServerStreamingClient[AgentPush], error)
+	Subscribe(ctx context.Context, in *AgentHello, opts ...grpc.CallOption) (grpc.ServerStreamingClient[AgentPush], error)
 	// Ack acknowledges receipt of a pushed bundle (for delivery tracking).
 	Ack(ctx context.Context, in *AgentAck, opts ...grpc.CallOption) (*AckResponse, error)
 }
@@ -44,9 +44,9 @@ func NewSigilAgentClient(cc grpc.ClientConnInterface) SigilAgentClient {
 	return &sigilAgentClient{cc}
 }
 
-func (c *sigilAgentClient) Connect(ctx context.Context, in *AgentHello, opts ...grpc.CallOption) (grpc.ServerStreamingClient[AgentPush], error) {
+func (c *sigilAgentClient) Subscribe(ctx context.Context, in *AgentHello, opts ...grpc.CallOption) (grpc.ServerStreamingClient[AgentPush], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &SigilAgent_ServiceDesc.Streams[0], SigilAgent_Connect_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &SigilAgent_ServiceDesc.Streams[0], SigilAgent_Subscribe_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +61,7 @@ func (c *sigilAgentClient) Connect(ctx context.Context, in *AgentHello, opts ...
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type SigilAgent_ConnectClient = grpc.ServerStreamingClient[AgentPush]
+type SigilAgent_SubscribeClient = grpc.ServerStreamingClient[AgentPush]
 
 func (c *sigilAgentClient) Ack(ctx context.Context, in *AgentAck, opts ...grpc.CallOption) (*AckResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
@@ -79,9 +79,9 @@ func (c *sigilAgentClient) Ack(ctx context.Context, in *AgentAck, opts ...grpc.C
 //
 // SigilAgent is the persistent streaming RPC used by Kprobe agents.
 type SigilAgentServer interface {
-	// Connect opens a server-streaming channel. Sigil pushes certs and policy
+	// Subscribe opens a server-streaming channel. Sigil pushes certs and policy
 	// as they change. The agent calls this once on startup and holds it open.
-	Connect(*AgentHello, grpc.ServerStreamingServer[AgentPush]) error
+	Subscribe(*AgentHello, grpc.ServerStreamingServer[AgentPush]) error
 	// Ack acknowledges receipt of a pushed bundle (for delivery tracking).
 	Ack(context.Context, *AgentAck) (*AckResponse, error)
 	mustEmbedUnimplementedSigilAgentServer()
@@ -94,8 +94,8 @@ type SigilAgentServer interface {
 // pointer dereference when methods are called.
 type UnimplementedSigilAgentServer struct{}
 
-func (UnimplementedSigilAgentServer) Connect(*AgentHello, grpc.ServerStreamingServer[AgentPush]) error {
-	return status.Error(codes.Unimplemented, "method Connect not implemented")
+func (UnimplementedSigilAgentServer) Subscribe(*AgentHello, grpc.ServerStreamingServer[AgentPush]) error {
+	return status.Error(codes.Unimplemented, "method Subscribe not implemented")
 }
 func (UnimplementedSigilAgentServer) Ack(context.Context, *AgentAck) (*AckResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Ack not implemented")
@@ -121,16 +121,16 @@ func RegisterSigilAgentServer(s grpc.ServiceRegistrar, srv SigilAgentServer) {
 	s.RegisterService(&SigilAgent_ServiceDesc, srv)
 }
 
-func _SigilAgent_Connect_Handler(srv interface{}, stream grpc.ServerStream) error {
+func _SigilAgent_Subscribe_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(AgentHello)
 	if err := stream.RecvMsg(m); err != nil {
 		return err
 	}
-	return srv.(SigilAgentServer).Connect(m, &grpc.GenericServerStream[AgentHello, AgentPush]{ServerStream: stream})
+	return srv.(SigilAgentServer).Subscribe(m, &grpc.GenericServerStream[AgentHello, AgentPush]{ServerStream: stream})
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type SigilAgent_ConnectServer = grpc.ServerStreamingServer[AgentPush]
+type SigilAgent_SubscribeServer = grpc.ServerStreamingServer[AgentPush]
 
 func _SigilAgent_Ack_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(AgentAck)
@@ -164,8 +164,8 @@ var SigilAgent_ServiceDesc = grpc.ServiceDesc{
 	},
 	Streams: []grpc.StreamDesc{
 		{
-			StreamName:    "Connect",
-			Handler:       _SigilAgent_Connect_Handler,
+			StreamName:    "Subscribe",
+			Handler:       _SigilAgent_Subscribe_Handler,
 			ServerStreams: true,
 		},
 	},

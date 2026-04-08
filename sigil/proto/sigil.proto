@@ -56,9 +56,9 @@ message AckResponse {
 
 // SigilAgent is the persistent streaming RPC used by Kprobe agents.
 service SigilAgent {
-  // Connect opens a server-streaming channel. Sigil pushes certs and policy
+  // Subscribe opens a server-streaming channel. Sigil pushes certs and policy
   // as they change. The agent calls this once on startup and holds it open.
-  rpc Connect(AgentHello) returns (stream AgentPush);
+  rpc Subscribe(AgentHello) returns (stream AgentPush);
 
   // Ack acknowledges receipt of a pushed bundle (for delivery tracking).
   rpc Ack(AgentAck) returns (AckResponse);

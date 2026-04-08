@@ -43,13 +43,13 @@ func main() {
 
 	log.Printf("Connecting to Sigil at %s (node=%s, cluster=%s)", *sigilAddr, *nodeID, *clusterID)
 
-	stream, err := client.Connect(ctx, &sigilv1.AgentHello{
+	stream, err := client.Subscribe(ctx, &sigilv1.AgentHello{
 		NodeId:    *nodeID,
 		ClusterId: *clusterID,
 		PodServiceIds: []string{"service-alpha", "service-beta"},
 	})
 	if err != nil {
-		log.Fatalf("Connect: %v", err)
+		log.Fatalf("Subscribe: %v", err)
 	}
 
 	log.Printf("Connected to Sigil at %s", *sigilAddr)

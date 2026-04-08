@@ -488,10 +488,10 @@ const file_sigil_proto_rawDesc = "" +
 	"\vreceived_at\x18\x02 \x01(\x03R\n" +
 	"receivedAt\"\x1d\n" +
 	"\vAckResponse\x12\x0e\n" +
-	"\x02ok\x18\x01 \x01(\bR\x02ok2v\n" +
+	"\x02ok\x18\x01 \x01(\bR\x02ok2x\n" +
 	"\n" +
-	"SigilAgent\x126\n" +
-	"\aConnect\x12\x14.sigil.v1.AgentHello\x1a\x13.sigil.v1.AgentPush0\x01\x120\n" +
+	"SigilAgent\x128\n" +
+	"\tSubscribe\x12\x14.sigil.v1.AgentHello\x1a\x13.sigil.v1.AgentPush0\x01\x120\n" +
 	"\x03Ack\x12\x12.sigil.v1.AgentAck\x1a\x15.sigil.v1.AckResponseB2Z0github.com/meshlite/sigil/internal/proto;sigilv1b\x06proto3"
 
 var (
@@ -520,9 +520,9 @@ var file_sigil_proto_depIdxs = []int32{
 	2, // 0: sigil.v1.PolicyBundle.rules:type_name -> sigil.v1.AllowRule
 	0, // 1: sigil.v1.AgentPush.cert:type_name -> sigil.v1.CertBundle
 	1, // 2: sigil.v1.AgentPush.policy:type_name -> sigil.v1.PolicyBundle
-	3, // 3: sigil.v1.SigilAgent.Connect:input_type -> sigil.v1.AgentHello
+	3, // 3: sigil.v1.SigilAgent.Subscribe:input_type -> sigil.v1.AgentHello
 	5, // 4: sigil.v1.SigilAgent.Ack:input_type -> sigil.v1.AgentAck
-	4, // 5: sigil.v1.SigilAgent.Connect:output_type -> sigil.v1.AgentPush
+	4, // 5: sigil.v1.SigilAgent.Subscribe:output_type -> sigil.v1.AgentPush
 	6, // 6: sigil.v1.SigilAgent.Ack:output_type -> sigil.v1.AckResponse
 	5, // [5:7] is the sub-list for method output_type
 	3, // [3:5] is the sub-list for method input_type

@@ -92,9 +92,9 @@ func (d *Distributor) ListenAndServe(ctx context.Context, addr string) error {
 	return srv.Serve(lis)
 }
 
-// Connect implements sigilv1.SigilAgentServer.
+// Subscribe implements sigilv1.SigilAgentServer.
 // Each agent opens this stream on startup and holds it open indefinitely.
-func (d *Distributor) Connect(hello *sigilv1.AgentHello, stream sigilv1.SigilAgent_ConnectServer) error {
+func (d *Distributor) Subscribe(hello *sigilv1.AgentHello, stream sigilv1.SigilAgent_SubscribeServer) error {
 	if hello.GetNodeId() == "" {
 		return status.Error(codes.InvalidArgument, "node_id is required")
 	}
@@ -119,7 +119,7 @@ func (d *Distributor) Connect(hello *sigilv1.AgentHello, stream sigilv1.SigilAge
 	d.logger.Info("agent connected", "node", hello.GetNodeId(), "cluster", hello.GetClusterId())
 
 	// Fire the connect callback asynchronously so it can call PushCert / BroadcastPolicy
-	// without deadlocking on the send loop below.
+	// without deadlocking on the subscribe loop below.
 	if d.OnConnect != nil {
 		go d.OnConnect(hello)
 	}
@@ -157,7 +157,7 @@ func (d *Distributor) Ack(_ context.Context, req *sigilv1.AgentAck) (*sigilv1.Ac
 
 // PushCert pushes a CertBundle to the agent on the given node.
 // If no agent is connected on that node the push is silently dropped —
-// the agent will receive the cert on the next Connect.
+// the agent will receive the cert on the next Subscribe.
 func (d *Distributor) PushCert(nodeID string, cb CertBundle) {
 	push := &sigilv1.AgentPush{
 		Payload: &sigilv1.AgentPush_Cert{
