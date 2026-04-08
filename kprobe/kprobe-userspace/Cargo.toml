@@ -38,3 +38,7 @@ tonic-build = "0.12"
 [[bin]]
 name = "kprobe-loader"
 path = "src/main.rs"
+
+[lib]
+name = "kprobe_userspace"
+path = "src/lib.rs"
