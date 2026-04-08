@@ -12,6 +12,7 @@ aya-log = "0.2"
 tonic = { version = "0.12", features = ["tls", "tls-roots"] }
 prost = "0.13"
 tokio-stream = "0.1"
+futures      = "0.3"
 
 # Pod watcher — Kubernetes API
 kube  = { version = "0.95", features = ["runtime", "derive"] }

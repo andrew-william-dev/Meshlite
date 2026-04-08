@@ -3,3 +3,4 @@
 
 pub mod cert_store;
 pub mod policy_cache;
+pub mod pod_watcher;
