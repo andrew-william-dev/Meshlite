@@ -19,7 +19,7 @@ Stage 2: RUNBOOK     → Write the step-by-step implementation and test guide
 Stage 3: CODING      → Implement each task from the runbook; commit when each task passes its unit tests
 Stage 4: EXECUTION   → Deploy, run integration tests, follow runbook test sections in order
 Stage 5: REPORT      → Record results, issues, decisions, readiness verdict
-Stage 6: DISCUSSION  → Confirm understanding; accept risk items for next phase
+Stage 6: DISCUSSION  → Confirm understanding; accept risk items; commit phase to main
 ```
 
 ---
@@ -172,12 +172,29 @@ Stage 6: DISCUSSION  → Confirm understanding; accept risk items for next phase
 ### Rules:
 - Do not start Stage 1 of the next phase until discussion confirms current phase is closed.
 - Questions that cannot be answered immediately become risk items in the next Approach.
+- **Do not commit until the user explicitly declares the phase done.** Wait for all queries to be resolved first.
+
+### Final Commit (triggered by user declaring phase done):
+
+Once the user confirms the phase is closed with no outstanding questions, commit everything to `main`:
+
+```sh
+# PowerShell — run from workspace root
+git add -A
+git commit -m "phase-N: close — <one-line summary of what was proven>"
+git push origin main
+```
+
+Commit message rules:
+- Prefix: `phase-N: close —` (replace N with the actual phase number)
+- Summary: one sentence describing what the phase proved or delivered (not a list of files)
+- Example: `phase-3: close — mTLS cert distribution and policy enforcement verified end-to-end`
 
 ---
 
 ## Per-Phase Document Checklist
 
-Before closing any phase, all three documents must exist plus all tasks coded and tested:
+Before closing any phase, all three documents must exist plus all tasks coded, tested, and committed:
 
 ```
 docs/phase-N/
@@ -189,6 +206,11 @@ Code:
   All runbook tasks implemented
   All unit tests passing
   All integration tests (Stage 4) passing
+
+Git:
+  User has declared phase done (all queries resolved)
+  All changes committed to main: "phase-N: close — <summary>"
+  Commit pushed to origin
 ```
 
 ---
