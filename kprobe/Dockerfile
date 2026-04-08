@@ -7,7 +7,12 @@ WORKDIR /build
 COPY kprobe/ kprobe/
 COPY sigil/proto/ sigil/proto/
 
-RUN cd kprobe && \
+# Copy rustup home into the current writable layer before building.
+# Without this, rustup channel-sync renames from a read-only lower overlay layer
+# to an upper layer and fails with EXDEV (os error 18 — cross-device link).
+RUN cp -a /usr/local/rustup /tmp/rustup && \
+    cd kprobe && \
+    RUSTUP_HOME=/tmp/rustup \
     cargo build --package kprobe-ebpf \
         -Z build-std=core \
         --target bpfel-unknown-none \
@@ -16,24 +21,27 @@ RUN cd kprobe && \
 # ─── Stage 2: compile userspace binary (musl for fully static binary) ─────────
 FROM rustlang/rust:nightly AS userspace-builder
 
-RUN rustup component add rust-src
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         protobuf-compiler \
         musl-tools && \
     rm -rf /var/lib/apt/lists/*
-RUN rustup target add x86_64-unknown-linux-musl
 
 WORKDIR /build
 COPY kprobe/ kprobe/
 COPY sigil/proto/ sigil/proto/
 
-# Copy the compiled eBPF object so build.rs can embed it if needed.
+# Copy the compiled eBPF object so the build can reference it.
 COPY --from=ebpf-builder \
      /build/kprobe/target/bpfel-unknown-none/release/kprobe-ebpf \
      /build/kprobe/target/bpfel-unknown-none/release/kprobe-ebpf
 
-RUN cd kprobe && \
+# Same RUSTUP_HOME trick: move into writable layer, then install components and build.
+RUN cp -a /usr/local/rustup /tmp/rustup && \
+    RUSTUP_HOME=/tmp/rustup rustup component add rust-src && \
+    RUSTUP_HOME=/tmp/rustup rustup target add x86_64-unknown-linux-musl && \
+    cd kprobe && \
+    RUSTUP_HOME=/tmp/rustup \
     cargo build --package kprobe-userspace \
         --release \
         --target x86_64-unknown-linux-musl

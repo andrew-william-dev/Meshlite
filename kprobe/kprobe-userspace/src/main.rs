@@ -13,6 +13,7 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
 use tokio::signal;
 use clap::Parser;
+use rcgen::KeyPair;
 
 use kprobe_userspace::{
     cert_store::CertStore,
@@ -245,18 +246,9 @@ async fn main() -> Result<()> {
 
 /// Generate a fresh ECDSA P-256 private key in PKCS#8 PEM format.
 /// This key is ephemeral — discarded when the process exits.
+/// Uses pure-Rust rcgen so no external binary is required in the container.
 fn generate_ecdsa_key_pem() -> Result<Vec<u8>> {
-    use std::process::Command;
-    // Use openssl CLI which is always available in the container image.
-    let output = Command::new("openssl")
-        .args(["genpkey", "-algorithm", "EC",
-               "-pkeyopt", "ec_paramgen_curve:P-256",
-               "-outform", "PEM"])
-        .output()
-        .context("Failed to run openssl genpkey — is openssl installed?")?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        anyhow::bail!("openssl genpkey failed: {}", stderr);
-    }
-    Ok(output.stdout)
+    let key_pair = KeyPair::generate()
+        .map_err(|e| anyhow::anyhow!("ECDSA key generation failed: {}", e))?;
+    Ok(key_pair.serialize_pem().into_bytes())
 }

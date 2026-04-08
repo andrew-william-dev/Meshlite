@@ -36,6 +36,9 @@ env_logger = "0.11"
 # CLI argument parsing
 clap = { version = "4", features = ["derive", "env"] }
 
+# Pure-Rust ECDSA P-256 key generation (used at startup to generate node key)
+rcgen = "0.13"
+
 [build-dependencies]
 tonic-build = "0.12"
 
