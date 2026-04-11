@@ -13,6 +13,10 @@ meshctl/meshctl
 conduit/conduit
 trace/backend/*.test
 
+# ─── Frontend build output ───────────────────────────────────────────────────
+trace/frontend/node_modules/
+trace/frontend/dist/
+
 # ─── Docker ───────────────────────────────────────────────────────────────────
 .dockerignore
 
