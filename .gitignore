@@ -25,7 +25,8 @@ trace/frontend/dist/
 # ─── Kubernetes / Helm ────────────────────────────────────────────────────────
 *.kubeconfig
 *-kubeconfig.yaml
-charts/**/charts/        # unpacked chart dependencies
+# vendored Helm dependency tarballs / unpacked chart dependencies
+charts/**/charts/
 charts/**/Chart.lock
 
 # ─── OS & editor ─────────────────────────────────────────────────────────────
