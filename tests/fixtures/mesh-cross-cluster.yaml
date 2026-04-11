@@ -26,13 +26,13 @@ policy:
   default_allow: false
   allow:
     - from: service-alpha
-      to: [service-beta]
+      to: [service-beta, conduit]
     # The Kubernetes-observed service identity for the Deployment is "conduit".
     # It must be allowed to reach Sigil for enrollment / policy polling.
     - from: conduit
-      to: [sigil, service-beta]
+      to: [sigil, service-beta, trace]
     # Enrolled cross-cluster identities are also documented explicitly.
     - from: conduit-cluster-1
-      to: [sigil, service-beta]
+      to: [sigil, service-beta, trace]
     - from: conduit-cluster-2
-      to: [sigil, service-alpha]
+      to: [sigil, service-alpha, trace]

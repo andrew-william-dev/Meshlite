@@ -347,6 +347,56 @@ func registerRoutes(
 		http.NotFound(w, r)
 	})
 
+	mux.HandleFunc("POST /api/v1/certs/{serviceID}/rotate", func(w http.ResponseWriter, r *http.Request) {
+		serviceID := r.PathValue("serviceID")
+		if serviceID == "" {
+			http.Error(w, "serviceID required", http.StatusBadRequest)
+			return
+		}
+
+		certs, err := authority.ListCerts()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		var current *ca.IssuedCert
+		for i := range certs {
+			if certs[i].ServiceID == serviceID {
+				current = &certs[i]
+				break
+			}
+		}
+		if current == nil {
+			http.NotFound(w, r)
+			return
+		}
+
+		issued, err := authority.Issue(current.ServiceID, current.ClusterID, current.Namespace)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("rotate failed: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		for _, nodeID := range dist.ConnectedAgents() {
+			dist.PushCert(nodeID, distributor.CertBundle{
+				ServiceID:      issued.ServiceID,
+				ServiceCertPEM: issued.CertPEM,
+				RootCAPEM:      issued.RootCAPEM,
+				ExpiresAtUnix:  issued.ExpiresAt.Unix(),
+				RotateAtUnix:   issued.RotateAt.Unix(),
+				KeyPEM:         issued.KeyPEM,
+			})
+		}
+
+		logger.Info("cert rotated via API", "service", serviceID, "connected_agents", len(dist.ConnectedAgents()))
+		writeJSON(w, map[string]any{
+			"status":          "rotated",
+			"service_id":      issued.ServiceID,
+			"expires_at_unix": issued.ExpiresAt.Unix(),
+		})
+	})
+
 	mux.HandleFunc("GET /api/v1/certs/root-ca.pem", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/x-pem-file")
 		_, _ = w.Write(authority.RootCAPEM())

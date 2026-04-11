@@ -11,6 +11,7 @@
 mod cluster_client;
 mod egress;
 mod ingress;
+mod telemetry;
 mod tls_config;
 
 use anyhow::{Context, Result};
@@ -54,6 +55,10 @@ struct Cli {
     /// [Ingress only] Port on which backend services listen
     #[arg(long, env = "CONDUIT_SVC_PORT", default_value_t = 8080)]
     svc_port: u16,
+
+    /// Trace API URL for telemetry emission.
+    #[arg(long, env = "CONDUIT_TRACE_URL", default_value = "http://trace.meshlite-system.svc.cluster.local:3000")]
+    trace_url: String,
 }
 
 #[tokio::main]
@@ -86,6 +91,7 @@ async fn main() -> Result<()> {
     // ── Step 3: Initial policy fetch + start poll ─────────────────────────────
     let policy_cache = Arc::new(Mutex::new(PolicyCache::new()));
     cluster_client::start_policy_poll(cli.sigil_addr.clone(), Arc::clone(&policy_cache));
+    let telemetry = telemetry::start(cli.trace_url.clone(), "conduit");
 
     // ── Step 4: Run the proxy ─────────────────────────────────────────────────
     let listen_addr = normalize_listen_addr(&cli.listen_addr);
@@ -100,6 +106,7 @@ async fn main() -> Result<()> {
                 cli.cluster_id,
                 cert_store,
                 policy_cache,
+                telemetry,
             )
             .await?;
         }
@@ -110,6 +117,7 @@ async fn main() -> Result<()> {
                 cert_store,
                 cli.svc_domain_suffix,
                 cli.svc_port,
+                telemetry,
             )
             .await?;
         }

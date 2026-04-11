@@ -1,0 +1,5 @@
+apiVersion: v2
+name: trace
+description: MeshLite Trace backend and Rancher-inspired UI
+version: 0.1.0
+appVersion: "phase5"

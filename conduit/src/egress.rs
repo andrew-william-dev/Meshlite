@@ -7,11 +7,12 @@
 //   3. If allowed, opens a mTLS connection to `peer_addr` (Ingress) and tunnels.
 //   4. If denied, responds with 403 and closes.
 
-use crate::tls_config;
+use crate::{telemetry::{TelemetryHandle, TelemetryRecord}, tls_config};
 use anyhow::Result;
 use meshlite_tls::{cert_store::CertStore, policy_cache::PolicyCache};
 use rustls::pki_types::ServerName;
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio_rustls::TlsConnector;
@@ -22,6 +23,7 @@ pub async fn run(
     cluster_id: String,
     cert_store: Arc<Mutex<CertStore>>,
     policy_cache: Arc<Mutex<PolicyCache>>,
+    telemetry: TelemetryHandle,
 ) -> Result<()> {
     let listener = TcpListener::bind(&listen_addr).await?;
     log::info!("[egress] listening on {listen_addr}, peer={peer_addr}");
@@ -34,10 +36,11 @@ pub async fn run(
         let cluster_id = cluster_id.clone();
         let cert_store = Arc::clone(&cert_store);
         let policy_cache = Arc::clone(&policy_cache);
+        let telemetry = telemetry.clone();
 
         tokio::spawn(async move {
             if let Err(e) = handle_connection(
-                stream, peer_addr, cluster_id, cert_store, policy_cache,
+                stream, peer_addr, cluster_id, cert_store, policy_cache, telemetry,
             )
             .await
             {
@@ -50,10 +53,13 @@ pub async fn run(
 async fn handle_connection(
     mut client: TcpStream,
     peer_addr: String,
-    _cluster_id: String,
+    cluster_id: String,
     cert_store: Arc<Mutex<CertStore>>,
     policy_cache: Arc<Mutex<PolicyCache>>,
+    telemetry: TelemetryHandle,
 ) -> Result<()> {
+    let started = Instant::now();
+
     // Read up to 8 KB — enough for any HTTP request header.
     let mut buf = vec![0u8; 8192];
     let n = client.read(&mut buf).await?;
@@ -80,6 +86,18 @@ async fn handle_connection(
     };
     if !allowed {
         log::info!("[egress] DENY -> {destination}");
+        telemetry.emit(TelemetryRecord {
+            source_service: format!("cluster/{cluster_id}"),
+            destination_service: destination.clone(),
+            cluster_id: cluster_id.clone(),
+            leg: "cross_cluster".into(),
+            verdict: "deny".into(),
+            latency_ms: started.elapsed().as_secs_f64() * 1000.0,
+            tls_verified: false,
+            status_code: Some(403),
+            error_reason: Some("policy_denied".into()),
+            timestamp: None,
+        });
         client
             .write_all(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n")
             .await?;
@@ -107,17 +125,81 @@ async fn handle_connection(
     // without needing separate peer-cluster-id plumbing in Phase 4.
     let server_name = ServerName::try_from("localhost")
         .map_err(|e| anyhow::anyhow!("invalid SNI name 'localhost': {e}"))?;
-    let upstream_tcp = TcpStream::connect(&peer_addr).await?;
+    let upstream_tcp = match TcpStream::connect(&peer_addr).await {
+        Ok(stream) => stream,
+        Err(e) => {
+            telemetry.emit(TelemetryRecord {
+                source_service: format!("cluster/{cluster_id}"),
+                destination_service: destination.clone(),
+                cluster_id: cluster_id.clone(),
+                leg: "cross_cluster".into(),
+                verdict: "error".into(),
+                latency_ms: started.elapsed().as_secs_f64() * 1000.0,
+                tls_verified: false,
+                status_code: None,
+                error_reason: Some(format!("connect_failed: {e}")),
+                timestamp: None,
+            });
+            return Err(e.into());
+        }
+    };
     log::debug!("[egress] TCP connect to {peer_addr} OK");
-    let mut upstream = connector.connect(server_name, upstream_tcp).await?;
+    let mut upstream = match connector.connect(server_name, upstream_tcp).await {
+        Ok(stream) => stream,
+        Err(e) => {
+            telemetry.emit(TelemetryRecord {
+                source_service: format!("cluster/{cluster_id}"),
+                destination_service: destination.clone(),
+                cluster_id: cluster_id.clone(),
+                leg: "cross_cluster".into(),
+                verdict: "tls_reject".into(),
+                latency_ms: started.elapsed().as_secs_f64() * 1000.0,
+                tls_verified: false,
+                status_code: None,
+                error_reason: Some(format!("mtls_handshake_failed: {e}")),
+                timestamp: None,
+            });
+            return Err(e.into());
+        }
+    };
     log::debug!("[egress] mTLS handshake to {peer_addr} OK");
 
     // Forward the buffered request header to the upstream.
     upstream.write_all(header_bytes).await?;
 
     // Bidirectional pipe.
-    tokio::io::copy_bidirectional(&mut client, &mut upstream).await?;
-    Ok(())
+    match tokio::io::copy_bidirectional(&mut client, &mut upstream).await {
+        Ok(_) => {
+            telemetry.emit(TelemetryRecord {
+                source_service: format!("cluster/{cluster_id}"),
+                destination_service: destination,
+                cluster_id,
+                leg: "cross_cluster".into(),
+                verdict: "allow".into(),
+                latency_ms: started.elapsed().as_secs_f64() * 1000.0,
+                tls_verified: true,
+                status_code: Some(200),
+                error_reason: None,
+                timestamp: None,
+            });
+            Ok(())
+        }
+        Err(e) => {
+            telemetry.emit(TelemetryRecord {
+                source_service: format!("cluster/{cluster_id}"),
+                destination_service: destination,
+                cluster_id,
+                leg: "cross_cluster".into(),
+                verdict: "error".into(),
+                latency_ms: started.elapsed().as_secs_f64() * 1000.0,
+                tls_verified: true,
+                status_code: None,
+                error_reason: Some(format!("proxy_failed: {e}")),
+                timestamp: None,
+            });
+            Err(e.into())
+        }
+    }
 }
 
 /// Extract the value of the `Host:` header from raw HTTP bytes.

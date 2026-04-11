@@ -15,8 +15,8 @@ policy:
     - from: service-alpha
       to: [service-beta]
     - from: conduit
-      to: [sigil, service-alpha]
+      to: [sigil, service-alpha, trace]
     - from: conduit-cluster-1
-      to: [sigil, service-beta]
+      to: [sigil, service-beta, trace]
     - from: conduit-cluster-2
-      to: [sigil, service-alpha]
+      to: [sigil, service-alpha, trace]

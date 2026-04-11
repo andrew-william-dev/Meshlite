@@ -30,6 +30,8 @@ spec:
               value: {{ .Values.cluster.id | quote }}
             - name: CONDUIT_SIGIL_ADDR
               value: {{ .Values.sigil.addr | quote }}
+            - name: CONDUIT_TRACE_URL
+              value: {{ .Values.trace.addr | quote }}
             - name: CONDUIT_PEER_ADDR
               value: {{ .Values.peer.addr | quote }}
             - name: CONDUIT_SVC_DOMAIN_SUFFIX

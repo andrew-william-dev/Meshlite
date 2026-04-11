@@ -31,6 +31,7 @@ spec:
             - --sigil-addr=$(SIGIL_ADDR)
             - --node-id=$(NODE_NAME)
             - --cluster-id=$(CLUSTER_ID)
+            - --trace-url=$(TRACE_URL)
           env:
             - name: NODE_NAME
               valueFrom:
@@ -42,6 +43,8 @@ spec:
               value: {{ .Values.ebpf.path | quote }}
             - name: SIGIL_ADDR
               value: {{ .Values.sigil.addr | quote }}
+            - name: TRACE_URL
+              value: {{ .Values.trace.addr | quote }}
             - name: CLUSTER_ID
               value: {{ .Values.cluster.id | quote }}
             - name: RUST_LOG

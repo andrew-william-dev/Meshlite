@@ -6,6 +6,9 @@ image:
 sigil:
   addr: "sigil.meshlite-system.svc.cluster.local:8443"
 
+trace:
+  addr: "http://trace.meshlite-system.svc.cluster.local:3000"
+
 cluster:
   id: "dev"
 

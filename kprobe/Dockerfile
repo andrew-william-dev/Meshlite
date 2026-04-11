@@ -5,6 +5,7 @@ RUN cargo install bpf-linker
 
 WORKDIR /build
 COPY kprobe/ kprobe/
+COPY crates/meshlite-tls/ crates/meshlite-tls/
 COPY sigil/proto/ sigil/proto/
 
 # Copy rustup home into the current writable layer before building.
@@ -29,6 +30,7 @@ RUN apt-get update && \
 
 WORKDIR /build
 COPY kprobe/ kprobe/
+COPY crates/meshlite-tls/ crates/meshlite-tls/
 COPY sigil/proto/ sigil/proto/
 
 # Copy the compiled eBPF object so the build can reference it.

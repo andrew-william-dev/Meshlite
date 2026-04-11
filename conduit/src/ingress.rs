@@ -7,7 +7,7 @@
 //      (or the host directly if already fully qualified).
 //   3. Tunnels bidirectionally.
 
-use crate::tls_config;
+use crate::{telemetry::{TelemetryHandle, TelemetryRecord}, tls_config};
 use anyhow::Result;
 use meshlite_tls::cert_store::CertStore;
 use std::sync::{Arc, Mutex};
@@ -21,6 +21,7 @@ pub async fn run(
     cert_store: Arc<Mutex<CertStore>>,
     svc_domain_suffix: String,
     svc_port: u16,
+    telemetry: TelemetryHandle,
 ) -> Result<()> {
     // Build server TLS config from stored certs.
     let tls_cfg = {
@@ -48,12 +49,32 @@ pub async fn run(
         let acceptor = acceptor.clone();
         let svc_domain_suffix = svc_domain_suffix.clone();
         let svc_port = svc_port;
+        let telemetry = telemetry.clone();
+        let cluster_id = cluster_id.clone();
 
         tokio::spawn(async move {
             if let Err(e) =
                 handle_connection(stream, acceptor, &svc_domain_suffix, svc_port).await
             {
-                log::warn!("[ingress] connection error: {e}");
+                let msg = e.to_string();
+                let verdict = if msg.contains("certificate") || msg.contains("alert") {
+                    "tls_reject"
+                } else {
+                    "error"
+                };
+                telemetry.emit(TelemetryRecord {
+                    source_service: format!("remote/{cluster_id}"),
+                    destination_service: "unknown".into(),
+                    cluster_id,
+                    leg: "cross_cluster".into(),
+                    verdict: verdict.into(),
+                    latency_ms: 0.0,
+                    tls_verified: false,
+                    status_code: None,
+                    error_reason: Some(msg.clone()),
+                    timestamp: None,
+                });
+                log::warn!("[ingress] connection error: {msg}");
             }
         });
     }

@@ -1,6 +1,6 @@
 # MeshLite — Architecture Documentation
 
-> **Version:** 0.1 — Discussion Phase  
+> **Version:** 1.0 — Phase 5 MVP Architecture  
 > **Components:** Sigil (Control Plane) · Kprobe (eBPF Enforcer) · Conduit (Gateway) · Trace (Observability Dashboard)
 
 ---
@@ -822,72 +822,97 @@ graph LR
 ```mermaid
 graph LR
     subgraph N1 ["Node 1"]
-        KP1["Kprobe sees every packet"]
-        TE1["Telemetry Emitter async write never blocks request"]
-        KP1 -->|per-request record| TE1
+        KP1["Kprobe sees same-cluster traffic"]
+        TE1["Async emitter best-effort only"]
+        KP1 -->|HTTP/JSON telemetry| TE1
     end
 
     subgraph N2 ["Node 2"]
         KP2["Kprobe"]
-        TE2["Telemetry Emitter"]
-        KP2 -->|per-request record| TE2
+        TE2["Async emitter"]
+        KP2 -->|HTTP/JSON telemetry| TE2
     end
 
     subgraph EDGE ["Cluster Boundary"]
-        CE_T["Conduit Egress boundary metrics"]
-        CI_T["Conduit Ingress boundary metrics"]
+        CE_T["Conduit Egress owns cross-cluster outcome"]
+        CI_T["Conduit Ingress reports TLS / routing failures"]
     end
 
     subgraph TRACE ["Trace"]
-        AGG["Aggregator merges all streams"]
+        AGG["In-memory aggregator"]
+        API["/summary /topology /events"]
         PROM["/metrics Prometheus endpoint"]
-        UI["Dashboard service graph latency + error rates"]
+        UI["Rancher-inspired dashboard"]
+        AGG --> API
         AGG --> PROM
-        AGG --> UI
+        API --> UI
     end
 
-    EXT["Grafana / Datadog"]
+    CLI["meshctl"]
+    EXT["Prometheus / Grafana"]
 
-    TE1 -->|gRPC stream| AGG
-    TE2 -->|gRPC stream| AGG
-    CE_T -->|boundary metrics| AGG
-    CI_T -->|boundary metrics| AGG
+    TE1 -->|POST /api/v1/telemetry| AGG
+    TE2 -->|POST /api/v1/telemetry| AGG
+    CE_T -->|POST /api/v1/telemetry| AGG
+    CI_T -->|POST /api/v1/telemetry| AGG
+    CLI -->|reads Trace + Sigil APIs| API
     PROM --> EXT
 ```
 
 ---
 
-### 11.2 TelemetryRecord — what every request produces
+### 11.2 `TelemetryRecord` — what every request produces
 
 ```mermaid
 classDiagram
     direction LR
 
     class TelemetryRecord {
-        +source : ServiceIdentity
-        +destination : ServiceIdentity
+        +sourceService : String
+        +destinationService : String
         +clusterID : String
         +leg : TrafficLeg
-        +latencyMs : Int
-        +statusCode : Int
-        +requestBytes : Int
-        +responseBytes : Int
+        +verdict : Verdict
+        +latencyMs : Float
         +tlsVerified : Boolean
-        +policyAllowed : Boolean
+        +statusCode : Int?
+        +errorReason : String?
         +timestamp : DateTime
     }
 
     class TrafficLeg {
         <<enumeration>>
-        INTRA_NODE
-        INTRA_CLUSTER
-        CROSS_CLUSTER_EGRESS
-        CROSS_CLUSTER_INGRESS
+        intra_cluster
+        cross_cluster
+    }
+
+    class Verdict {
+        <<enumeration>>
+        allow
+        deny
+        tls_reject
+        error
     }
 
     TelemetryRecord --> TrafficLeg : classified by
-
-    note for TrafficLeg "TrafficLeg lets Trace stitch cross-cluster requests together. Egress record from C1 + Ingress record from C2 = one full end-to-end journey"
+    TelemetryRecord --> Verdict : records outcome
 ```
+
+---
+
+### 11.3 Trace access model for real users
+
+For the Phase 5 MVP, Trace is intended to run **inside the cluster** and be accessed in one of two ways:
+
+1. **Local / development** — `kubectl port-forward svc/trace 3000:3000 9090:9090`
+2. **Private consumer deployment** — an **internal ingress** or **internal load balancer** on a private DNS name such as `trace.mesh.internal`
+
+This is the current “no-auth” story:
+
+- acceptable for private/internal environments,
+- acceptable behind VPN, internal VPC routing, or IP allowlists,
+- **not** acceptable as a public internet-facing production model.
+
+That boundary is deliberate: the MVP proves the operator workflow, while full auth/RBAC remains a later hardening step.
 
 ---

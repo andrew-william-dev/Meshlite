@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "trace.fullname" . }}
+  labels:
+    app: trace
+    app.kubernetes.io/name: {{ include "trace.name" . }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "trace.name" . }}
+  template:
+    metadata:
+      labels:
+        app: trace
+        app.kubernetes.io/name: {{ include "trace.name" . }}
+    spec:
+      containers:
+        - name: trace
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - --http-addr={{ .Values.trace.httpAddr }}
+            - --metrics-addr={{ .Values.trace.metricsAddr }}
+            - --web-dir=/app/web
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.httpPort }}
+            - name: metrics
+              containerPort: {{ .Values.service.metricsPort }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          resources:
+{{ toYaml .Values.resources | indent 12 }}

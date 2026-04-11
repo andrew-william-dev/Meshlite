@@ -1,0 +1,28 @@
+replicaCount: 1
+
+image:
+  repository: meshlite/trace
+  tag: phase5
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  httpPort: 3000
+  metricsPort: 9090
+
+resources: {}
+
+trace:
+  httpAddr: ":3000"
+  metricsAddr: ":9090"
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: trace.mesh.internal
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []

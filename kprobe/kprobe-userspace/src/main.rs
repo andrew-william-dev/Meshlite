@@ -1,4 +1,6 @@
 use anyhow::{Context, Result};
+mod telemetry;
+
 use aya::{
     maps::{AsyncPerfEventArray, Array, HashMap as AyaHashMap},
     programs::{tc, SchedClassifier, TcAttachType},
@@ -17,7 +19,7 @@ use clap::Parser;
 use kprobe_userspace::{
     cert_store::CertStore,
     policy_cache::PolicyCache,
-    pod_watcher::{PodEvent, PodWatcher},
+    pod_watcher::{PodEvent, PodSnapshot, PodWatcher},
     sigil_client::SigilClient,
     verdict_sync::VerdictSync,
 };
@@ -46,6 +48,10 @@ struct Cli {
     /// Cluster identifier.
     #[arg(long, default_value = "dev")]
     cluster_id: String,
+
+    /// Trace API URL for best-effort telemetry emission.
+    #[arg(long, env = "TRACE_URL", default_value = "http://trace.meshlite-system.svc.cluster.local:3000")]
+    trace_url: String,
 }
 
 // ─── Shared type ─────────────────────────────────────────────────────────────
@@ -61,6 +67,16 @@ struct PacketLog {
     dst_port: u16, // host byte order
     proto:    u8,  // 6 = TCP, 17 = UDP
     verdict:  u8,  // 0 = ALLOW, 1 = DENY
+}
+
+fn resolve_service(snapshot: &Arc<Mutex<PodSnapshot>>, ip: Ipv4Addr) -> String {
+    let snap = snapshot.lock().unwrap();
+    for (service, ips) in snap.iter() {
+        if ips.iter().any(|candidate| *candidate == ip) {
+            return service.clone();
+        }
+    }
+    "unknown".to_string()
 }
 
 // ─── Entry point ─────────────────────────────────────────────────────────────
@@ -142,6 +158,7 @@ async fn main() -> Result<()> {
     // cert and private key both come from Sigil (no local key generation needed).
     let cert_store   = Arc::new(Mutex::new(CertStore::new()));
     let policy_cache = Arc::new(Mutex::new(PolicyCache::new()));
+    let telemetry = telemetry::start(cli.trace_url.clone(), "kprobe");
 
     // sync_tx fires whenever CertStore or PolicyCache is updated,
     // triggering VerdictSync to rebuild VERDICT_MAP.
@@ -201,6 +218,9 @@ async fn main() -> Result<()> {
         let mut buf = perf_array
             .open(cpu_id, None)
             .with_context(|| format!("Failed to open perf buffer for CPU {}", cpu_id))?;
+        let pod_snapshot_read = Arc::clone(&pod_snapshot);
+        let telemetry = telemetry.clone();
+        let cluster_id = cli.cluster_id.clone();
 
         tokio::spawn(async move {
             let mut buffers: Vec<BytesMut> = (0..10)
@@ -248,6 +268,23 @@ async fn main() -> Result<()> {
                             "[INTERCEPT] src={}:{} dst={}:{} proto={} verdict={}",
                             src, log.src_port, dst, log.dst_port, proto, verdict
                         );
+
+                        let source_service = resolve_service(&pod_snapshot_read, src);
+                        let destination_service = resolve_service(&pod_snapshot_read, dst);
+                        if source_service != "unknown" || destination_service != "unknown" {
+                            telemetry.emit(telemetry::TelemetryRecord {
+                                source_service,
+                                destination_service,
+                                cluster_id: cluster_id.clone(),
+                                leg: "intra_cluster".into(),
+                                verdict: if log.verdict == 0 { "allow".into() } else { "deny".into() },
+                                latency_ms: 0.0,
+                                tls_verified: log.verdict == 0,
+                                status_code: if log.verdict == 0 { Some(200) } else { None },
+                                error_reason: if log.verdict == 0 { None } else { Some("policy_denied".into()) },
+                                timestamp: None,
+                            });
+                        }
                     }
                 }
             }

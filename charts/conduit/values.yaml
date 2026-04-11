@@ -12,6 +12,9 @@ cluster:
 sigil:
   addr: "sigil.meshlite-system.svc.cluster.local:8080"
 
+trace:
+  addr: "http://trace.meshlite-system.svc.cluster.local:3000"
+
 # Egress: address of the remote Ingress NodePort (host:port)
 peer:
   addr: ""
