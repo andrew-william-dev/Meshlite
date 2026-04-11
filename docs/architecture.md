@@ -842,7 +842,7 @@ graph LR
         AGG["In-memory aggregator"]
         API["/summary /topology /events"]
         PROM["/metrics Prometheus endpoint"]
-        UI["Rancher-inspired dashboard"]
+        UI["Application-first dashboard"]
         AGG --> API
         AGG --> PROM
         API --> UI

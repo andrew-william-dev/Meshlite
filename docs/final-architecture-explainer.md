@@ -95,7 +95,7 @@ Used for visual operations such as:
 - spotting cross-cluster edges,
 - reviewing recent policy or TLS-related events.
 
-The UI is intentionally **Rancher-inspired**: admin-console style, fast to scan, and focused on operator workflows rather than consumer-facing polish.
+The UI is intentionally **application-first and operator-friendly**: fast to scan, focused on service journeys, and designed around MeshLite workflows rather than generic platform mimicry.
 
 ---
 
@@ -155,4 +155,4 @@ Main limitations still remaining:
 
 If you explain MeshLite to a stakeholder in one paragraph, it is this:
 
-> **MeshLite is a lightweight Kubernetes zero-trust mesh that secures same-cluster traffic with eBPF, secures cross-cluster traffic with boundary gateways, uses a central control plane for service identity and policy, and now exposes a Rancher-inspired UI plus `meshctl` so operators can see live traffic, denials, and topology without changing application code.**
+> **MeshLite is a lightweight Kubernetes zero-trust mesh that secures same-cluster traffic with eBPF, secures cross-cluster traffic with boundary gateways, uses a central control plane for service identity and policy, and now exposes an application-first UI plus `meshctl` so operators can see live traffic, denials, and topology without changing application code.**

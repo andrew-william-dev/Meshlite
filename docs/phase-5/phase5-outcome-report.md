@@ -14,7 +14,7 @@
 | **Sigil endpoint** | `http://127.0.0.1:8080` (`/healthz` returned `{"status":"ok"}`) |
 | **Trace endpoint** | `http://127.0.0.1:3000` (`/healthz` returned `{"status":"ok"}`) |
 | **Trace metrics** | `http://127.0.0.1:9090/metrics` |
-| **Phase focus** | Rancher-inspired operator UI, private/internal no-auth access model, and `meshctl` MVP |
+| **Phase focus** | Application-first operator UI, private/internal no-auth access model, and `meshctl` MVP |
 | **Commit state at report time** | Working tree verified locally before close-out commit |
 
 ---
@@ -32,7 +32,7 @@
 | Component | Description | Location |
 |---|---|---|
 | **Trace backend** | Ingests telemetry over HTTP/JSON, aggregates request stats in memory, exposes `/summary`, `/topology`, `/events`, `/metrics`, and `/healthz` | `trace/backend/` |
-| **Trace frontend** | React + TypeScript + Vite dashboard with a **Rancher-inspired** operator layout: sidebar, summary cards, topology graph, traffic table, and event feed | `trace/frontend/` |
+| **Trace frontend** | React + TypeScript + Vite dashboard with an **application-first** operator layout: sidebar, summary cards, topology graph, traffic table, and event feed | `trace/frontend/` |
 | **Trace Helm chart** | Deploys Trace in-cluster and supports port-forward or private/internal ingress usage | `charts/trace/` |
 | **`meshctl` CLI** | Thin operator CLI for `apply`, `status`, `verify`, `logs`, `rotate`, and `version` | `meshctl/` |
 | **Sigil rotate API** | Added manual rotation endpoint for `meshctl rotate` | `sigil/cmd/server/main.go` |
@@ -60,7 +60,7 @@ A request sent through `conduit-egress` to cluster 2 showed up with `leg="cross_
 
 ### 4. The operator surface is now usable from both UI and CLI
 
-`meshctl status`, `meshctl verify`, `meshctl apply`, `meshctl rotate`, and `meshctl logs` all succeeded against the live runtime. In parallel, the Trace topology and summary APIs returned real nodes, edges, totals, and event data that the frontend can render in the Rancher-inspired dashboard.
+`meshctl status`, `meshctl verify`, `meshctl apply`, `meshctl rotate`, and `meshctl logs` all succeeded against the live runtime. In parallel, the Trace topology and summary APIs returned real nodes, edges, totals, and event data that the frontend can render in the application-first dashboard.
 
 ### 5. Private/internal no-auth access is workable for the MVP
 
@@ -111,7 +111,7 @@ The design is now explicit: Trace may be opened by `kubectl port-forward` in loc
 
 ## Architecture Decisions Locked by Phase 5
 
-1. **Trace stays Rancher-inspired, not Rancher-cloned.** The goal is an operator-first admin console feel, not feature parity or a product copy.
+1. **Trace stays operator-first and product-native.** The goal is a clear MeshLite admin console feel, not feature parity with any other platform.
 2. **No-auth Trace access is only acceptable on a private/internal boundary.** Port-forward, VPN-only DNS, internal ingress, internal load balancers, and IP allowlists are valid MVP access patterns; public unauthenticated exposure is not.
 3. **Telemetry transport remains best-effort HTTP/JSON.** Observability must never block the request path or change enforcement behavior.
 4. **Trace aggregation may remain in-memory for the MVP.** Restart-safe retention and long-term storage are intentionally deferred.
