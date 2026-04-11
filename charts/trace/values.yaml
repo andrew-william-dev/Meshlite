@@ -1,9 +1,11 @@
 replicaCount: 1
 
 image:
-  repository: meshlite/trace
-  tag: phase5
+  repository: ghcr.io/andrew-william-dev/meshlite/trace
+  tag: ""
   pullPolicy: IfNotPresent
+
+imagePullSecrets: []
 
 service:
   type: ClusterIP
@@ -19,7 +21,9 @@ trace:
 ingress:
   enabled: false
   className: ""
-  annotations: {}
+  annotations:
+    # alb.ingress.kubernetes.io/scheme: internal
+    # alb.ingress.kubernetes.io/target-type: ip
   hosts:
     - host: trace.mesh.internal
       paths:

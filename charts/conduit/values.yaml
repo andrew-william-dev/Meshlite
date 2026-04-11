@@ -1,7 +1,11 @@
+replicaCount: 1
+
 image:
-  repository: meshlite/conduit
+  repository: ghcr.io/andrew-william-dev/meshlite/conduit
   pullPolicy: IfNotPresent
-  tag: "phase4"
+  tag: ""
+
+imagePullSecrets: []
 
 # "egress" or "ingress"
 mode: egress
@@ -29,3 +33,5 @@ egress:
 
 ingress:
   listenPort: 443
+
+resources: {}

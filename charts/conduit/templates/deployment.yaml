@@ -7,7 +7,7 @@ metadata:
     app: conduit
     conduit/mode: {{ .Values.mode | quote }}
 spec:
-  replicas: 1
+  replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
       app: conduit
@@ -19,9 +19,13 @@ spec:
         conduit/mode: {{ .Values.mode | quote }}
     spec:
       serviceAccountName: {{ include "conduit.fullname" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: conduit
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - name: CONDUIT_MODE
@@ -55,3 +59,5 @@ spec:
             - containerPort: {{ .Values.ingress.listenPort }}
               name: tls
             {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}

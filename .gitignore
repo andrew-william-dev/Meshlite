@@ -16,6 +16,8 @@ trace/backend/*.test
 # ─── Frontend build output ───────────────────────────────────────────────────
 trace/frontend/node_modules/
 trace/frontend/dist/
+.release/
+.artifacts/
 
 # ─── Docker ───────────────────────────────────────────────────────────────────
 .dockerignore

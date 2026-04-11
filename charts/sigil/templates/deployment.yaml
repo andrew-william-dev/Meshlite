@@ -16,6 +16,10 @@ spec:
         app: sigil
     spec:
       serviceAccountName: {{ include "sigil.fullname" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       {{- if .Values.existingRootCASecret }}
       initContainers:
         - name: import-root-ca
@@ -36,7 +40,7 @@ spec:
       {{- end }}
       containers:
         - name: sigil
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
             - --config=/config/{{ .Values.config.meshConfigKey }}

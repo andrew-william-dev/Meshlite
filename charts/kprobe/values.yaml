@@ -1,7 +1,9 @@
 image:
-  repository: meshlite/kprobe
+  repository: ghcr.io/andrew-william-dev/meshlite/kprobe
   pullPolicy: IfNotPresent
-  tag: "phase3"
+  tag: ""
+
+imagePullSecrets: []
 
 sigil:
   addr: "sigil.meshlite-system.svc.cluster.local:8443"
@@ -15,3 +17,5 @@ cluster:
 ebpf:
   iface: "eth0"
   path: "/app/kprobe-ebpf"
+
+resources: {}

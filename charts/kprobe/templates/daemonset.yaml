@@ -15,6 +15,10 @@ spec:
         app: kprobe
     spec:
       serviceAccountName: {{ include "kprobe.fullname" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       tolerations:
         # Run on all nodes including control-plane.
         - operator: Exists
@@ -23,7 +27,7 @@ spec:
       dnsPolicy: ClusterFirstWithHostNet
       containers:
         - name: kprobe
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
             - --iface=$(IFACE)
@@ -49,6 +53,8 @@ spec:
               value: {{ .Values.cluster.id | quote }}
             - name: RUST_LOG
               value: "info"
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
           securityContext:
             privileged: true
             capabilities:

@@ -1,0 +1,41 @@
+apiVersion: v2
+name: meshlite
+description: MeshLite umbrella chart for Sigil, Kprobe, Trace, and optional Conduit gateways
+type: application
+version: 0.5.0
+appVersion: "0.5.0"
+home: https://github.com/andrew-william-dev/Meshlite
+sources:
+  - https://github.com/andrew-william-dev/Meshlite
+keywords:
+  - service-mesh
+  - zero-trust
+  - kubernetes
+  - ebpf
+  - mtls
+maintainers:
+  - name: Andrew William
+
+dependencies:
+  - name: sigil
+    version: 0.5.0
+    repository: file://../sigil
+    condition: sigil.enabled
+  - name: kprobe
+    version: 0.5.0
+    repository: file://../kprobe
+    condition: kprobe.enabled
+  - name: trace
+    version: 0.5.0
+    repository: file://../trace
+    condition: trace.enabled
+  - name: conduit
+    alias: conduitEgress
+    version: 0.5.0
+    repository: file://../conduit
+    condition: conduitEgress.enabled
+  - name: conduit
+    alias: conduitIngress
+    version: 0.5.0
+    repository: file://../conduit
+    condition: conduitIngress.enabled

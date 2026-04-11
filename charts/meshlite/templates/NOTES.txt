@@ -1,0 +1,18 @@
+Thank you for installing MeshLite.
+
+Next steps:
+
+1. Check the runtime objects:
+   kubectl get pods -n {{ .Release.Namespace }}
+
+2. Access Trace locally:
+   kubectl -n {{ .Release.Namespace }} port-forward svc/trace 3000:3000 9090:9090
+
+3. For private/internal access, enable Trace ingress with an internal class or ALB/NLB:
+   helm upgrade --install meshlite oci://ghcr.io/andrew-william-dev/charts/meshlite \
+     --namespace {{ .Release.Namespace }} \
+     --create-namespace \
+     -f charts/meshlite/examples/eks-internal-values.yaml
+
+4. Verify the operator flow:
+   meshctl --sigil-url http://127.0.0.1:8080 --trace-url http://127.0.0.1:3000 status

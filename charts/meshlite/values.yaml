@@ -1,0 +1,75 @@
+global:
+  imageTag: ""
+
+sigil:
+  enabled: true
+  image:
+    repository: ghcr.io/andrew-william-dev/meshlite/sigil
+    tag: ""
+  imagePullSecrets: []
+  existingRootCASecret: ""
+  config:
+    meshConfigMap: sigil-mesh-config
+    meshConfigKey: mesh.yaml
+
+kprobe:
+  enabled: true
+  image:
+    repository: ghcr.io/andrew-william-dev/meshlite/kprobe
+    tag: ""
+  imagePullSecrets: []
+  cluster:
+    id: dev
+  sigil:
+    addr: sigil.meshlite-system.svc.cluster.local:8443
+  trace:
+    addr: http://trace.meshlite-system.svc.cluster.local:3000
+
+trace:
+  enabled: true
+  image:
+    repository: ghcr.io/andrew-william-dev/meshlite/trace
+    tag: ""
+  imagePullSecrets: []
+  ingress:
+    enabled: false
+    className: ""
+    annotations: {}
+    hosts:
+      - host: trace.mesh.internal
+        paths:
+          - path: /
+            pathType: Prefix
+    tls: []
+
+conduitEgress:
+  enabled: false
+  mode: egress
+  image:
+    repository: ghcr.io/andrew-william-dev/meshlite/conduit
+    tag: ""
+  imagePullSecrets: []
+  cluster:
+    id: cluster-1
+  sigil:
+    addr: sigil.meshlite-system.svc.cluster.local:8080
+  trace:
+    addr: http://trace.meshlite-system.svc.cluster.local:3000
+  peer:
+    addr: ""
+
+conduitIngress:
+  enabled: false
+  mode: ingress
+  image:
+    repository: ghcr.io/andrew-william-dev/meshlite/conduit
+    tag: ""
+  imagePullSecrets: []
+  cluster:
+    id: cluster-2
+  sigil:
+    addr: sigil.meshlite-system.svc.cluster.local:8080
+  trace:
+    addr: http://trace.meshlite-system.svc.cluster.local:3000
+  peer:
+    addr: ""

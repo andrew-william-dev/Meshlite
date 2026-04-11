@@ -1,12 +1,15 @@
 replicaCount: 1
 
 image:
-  repository: meshlite/sigil
+  repository: ghcr.io/andrew-william-dev/meshlite/sigil
   pullPolicy: IfNotPresent
-  tag: "phase3"
+  tag: ""
+
+imagePullSecrets: []
 
 nameOverride: ""
 fullnameOverride: ""
+existingRootCASecret: ""
 
 service:
   type: ClusterIP

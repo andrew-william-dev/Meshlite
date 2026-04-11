@@ -1,0 +1,28 @@
+trace:
+  ingress:
+    enabled: true
+    className: alb
+    annotations:
+      alb.ingress.kubernetes.io/scheme: internal
+      alb.ingress.kubernetes.io/target-type: ip
+      alb.ingress.kubernetes.io/group.name: meshlite-internal
+    hosts:
+      - host: trace.mesh.internal
+        paths:
+          - path: /
+            pathType: Prefix
+
+kprobe:
+  cluster:
+    id: eks-cluster-1
+
+conduitEgress:
+  enabled: true
+  mode: egress
+  cluster:
+    id: eks-cluster-1
+  peer:
+    addr: conduit-ingress.mesh.internal:443
+
+conduitIngress:
+  enabled: false
