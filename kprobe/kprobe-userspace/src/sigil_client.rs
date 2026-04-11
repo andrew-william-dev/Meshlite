@@ -24,6 +24,7 @@ use tonic::transport::{Channel, ClientTlsConfig, Endpoint};
 
 use crate::cert_store::CertStore;
 use crate::policy_cache::{AllowRule, PolicyCache};
+use crate::pod_watcher::PodSnapshot;
 
 // Import the generated proto types (module path set by tonic-build / prost).
 pub mod proto {
@@ -46,20 +47,20 @@ enum State {
 }
 
 pub struct SigilClient {
-    sigil_addr:      String,
-    node_id:         String,
-    cluster_id:      String,
-    pod_service_ids: Vec<String>,
+    sigil_addr:   String,
+    node_id:      String,
+    cluster_id:   String,
+    pod_snapshot: Arc<Mutex<PodSnapshot>>,
 }
 
 impl SigilClient {
     pub fn new(
-        sigil_addr:      String,
-        node_id:         String,
-        cluster_id:      String,
-        pod_service_ids: Vec<String>,
+        sigil_addr:   String,
+        node_id:      String,
+        cluster_id:   String,
+        pod_snapshot: Arc<Mutex<PodSnapshot>>,
     ) -> Self {
-        Self { sigil_addr, node_id, cluster_id, pod_service_ids }
+        Self { sigil_addr, node_id, cluster_id, pod_snapshot }
     }
 
     /// Async run loop.  Sends on `sync_tx` whenever a CertBundle or PolicyBundle
@@ -86,24 +87,27 @@ impl SigilClient {
                                     loop {
                                         match stream.message().await {
                                             Ok(Some(push)) => {
-                                                if let Some(Payload::Cert(bundle)) = push.payload {
-                                                    info!(
-                                                        "[sigil_client] CertBundle received service={}",
-                                                        bundle.service_id
-                                                    );
-                                                    cert_store.lock().unwrap().update(
-                                                        &bundle.service_id,
-                                                        bundle.service_cert_pem,
-                                                        bundle.root_ca_pem,
-                                                    );
-                                                    let _ = sync_tx.send(()).await;
-                                                    state = State::UpgradingTLS;
-                                                    break;
-                                                }
-                                                // PolicyBundle before cert — store it too.
-                                                if let Some(Payload::Policy(pb)) = push.payload {
-                                                    apply_policy_bundle(pb, &policy_cache);
-                                                    let _ = sync_tx.send(()).await;
+                                                match push.payload {
+                                                    Some(Payload::Cert(bundle)) => {
+                                                        info!(
+                                                            "[sigil_client] CertBundle received service={}",
+                                                            bundle.service_id
+                                                        );
+                                                        cert_store.lock().unwrap().update(
+                                                            &bundle.service_id,
+                                                            bundle.service_cert_pem,
+                                                            bundle.root_ca_pem,
+                                                            bundle.key_pem,
+                                                        );
+                                                        let _ = sync_tx.send(()).await;
+                                                        state = State::UpgradingTLS;
+                                                        break;
+                                                    }
+                                                    Some(Payload::Policy(pb)) => {
+                                                        apply_policy_bundle(pb, &policy_cache);
+                                                        let _ = sync_tx.send(()).await;
+                                                    }
+                                                    None => {}
                                                 }
                                             }
                                             Ok(None) => {
@@ -111,7 +115,7 @@ impl SigilClient {
                                                 break;
                                             }
                                             Err(e) => {
-                                                warn!("[sigil_client] Bootstrap stream error: {}", e);
+                                                warn!("[sigil_client] Bootstrap stream error: {:?}", e);
                                                 break;
                                             }
                                         }
@@ -186,6 +190,7 @@ impl SigilClient {
                                                             &bundle.service_id,
                                                             bundle.service_cert_pem,
                                                             bundle.root_ca_pem,
+                                                            bundle.key_pem,
                                                         );
                                                         let _ = sync_tx.send(()).await;
                                                     }
@@ -229,17 +234,30 @@ impl SigilClient {
     // ── helpers ───────────────────────────────────────────────────────────────
 
     fn make_hello(&self) -> AgentHello {
+        let mut svc_ids = self.pod_snapshot.lock().unwrap()
+            .keys()
+            .cloned()
+            .collect::<Vec<String>>();
+        // Always include the node agent itself so Sigil issues at least one cert.
+        if !svc_ids.contains(&self.node_id) {
+            svc_ids.insert(0, self.node_id.clone());
+        }
         AgentHello {
             node_id:         self.node_id.clone(),
             cluster_id:      self.cluster_id.clone(),
-            pod_service_ids: self.pod_service_ids.clone(),
+            pod_service_ids: svc_ids,
         }
     }
 
     async fn bootstrap_connect(
         &self,
     ) -> Result<SigilAgentClient<Channel>, tonic::transport::Error> {
-        let endpoint = Endpoint::from_shared(format!("http://{}", self.sigil_addr))?
+        // Bootstrap uses the plaintext gRPC port (8444) on Sigil — no client
+        // cert available yet.  The TLS channel (8443) is used after UpgradingTLS.
+        let plain_addr = self.sigil_addr
+            .replace(":8443", ":8444");
+        info!("[sigil_client] Bootstrap connecting to plaintext addr={}", plain_addr);
+        let endpoint = Endpoint::from_shared(format!("http://{}", plain_addr))?
             .connect_timeout(Duration::from_secs(10))
             .timeout(Duration::from_secs(30));
         let channel = endpoint.connect().await?;
@@ -343,21 +361,26 @@ mod tests {
 
     #[test]
     fn client_constructs_hello() {
+        use crate::pod_watcher::PodSnapshot;
+        let mut snapshot = PodSnapshot::new();
+        snapshot.insert("service-alpha".to_string(), vec![]);
+        let pod_snapshot = Arc::new(Mutex::new(snapshot));
         let client = SigilClient::new(
             "sigil:8443".to_string(),
             "node-1".to_string(),
             "dev".to_string(),
-            vec!["service-alpha".to_string()],
+            pod_snapshot,
         );
         let hello = client.make_hello();
         assert_eq!(hello.node_id, "node-1");
         assert_eq!(hello.cluster_id, "dev");
-        assert_eq!(hello.pod_service_ids, vec!["service-alpha"]);
+        assert!(hello.pod_service_ids.contains(&"node-1".to_string()));
+        assert!(hello.pod_service_ids.contains(&"service-alpha".to_string()));
     }
 
     #[test]
     fn build_tls_channel_fails_on_empty_store() {
-        let store = CertStore::new(b"fake-key".to_vec());
+        let store = CertStore::new();
         let result = build_tls_channel("sigil:8443", &store);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("empty"));

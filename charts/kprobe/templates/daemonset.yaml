@@ -19,7 +19,8 @@ spec:
         # Run on all nodes including control-plane.
         - operator: Exists
       hostPID: false
-      hostNetwork: false
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
       containers:
         - name: kprobe
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -43,6 +44,8 @@ spec:
               value: {{ .Values.sigil.addr | quote }}
             - name: CLUSTER_ID
               value: {{ .Values.cluster.id | quote }}
+            - name: RUST_LOG
+              value: "info"
           securityContext:
             privileged: true
             capabilities:

@@ -13,6 +13,9 @@ spec:
     - name: grpc
       port: {{ .Values.service.grpcPort }}
       targetPort: grpc
+    - name: grpc-plain
+      port: {{ .Values.service.grpcPlainPort }}
+      targetPort: grpc-plain
     - name: http
       port: {{ .Values.service.httpPort }}
       targetPort: http

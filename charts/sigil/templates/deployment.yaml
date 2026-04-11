@@ -26,10 +26,13 @@ spec:
             - --root-key={{ .Values.persistence.mountPath }}/root.key
             - --root-cert={{ .Values.persistence.mountPath }}/root.crt
             - --grpc-addr=:{{ .Values.service.grpcPort }}
+            - --grpc-plain-addr=:{{ .Values.service.grpcPlainPort }}
             - --http-addr=:{{ .Values.service.httpPort }}
           ports:
             - name: grpc
               containerPort: {{ .Values.service.grpcPort }}
+            - name: grpc-plain
+              containerPort: {{ .Values.service.grpcPlainPort }}
             - name: http
               containerPort: {{ .Values.service.httpPort }}
           volumeMounts:

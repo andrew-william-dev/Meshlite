@@ -154,6 +154,12 @@ func (c *CA) Issue(serviceID, clusterID, namespace string) (*IssuedCert, error) 
 
 	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
 
+	keyDER, err := x509.MarshalPKCS8PrivateKey(leafKey)
+	if err != nil {
+		return nil, fmt.Errorf("ca: marshal leaf key: %w", err)
+	}
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER})
+
 	if err := c.persistCert(serial.String(), serviceID, clusterID, namespace, certPEM, expiry, rotateAtTime); err != nil {
 		return nil, fmt.Errorf("ca: persist cert: %w", err)
 	}
@@ -163,6 +169,7 @@ func (c *CA) Issue(serviceID, clusterID, namespace string) (*IssuedCert, error) 
 		ClusterID:    clusterID,
 		Namespace:    namespace,
 		CertPEM:      certPEM,
+		KeyPEM:       keyPEM,
 		RootCAPEM:    c.rootPEM,
 		ExpiresAt:    expiry,
 		RotateAt:     rotateAtTime,

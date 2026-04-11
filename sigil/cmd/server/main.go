@@ -33,8 +33,9 @@ func main() {
 	dbPath := flag.String("db", "/data/sigil.db", "Path to SQLite database file")
 	keyPath := flag.String("root-key", "/data/root.key", "Path to root CA private key file")
 	certPath := flag.String("root-cert", "/data/root.crt", "Path to root CA certificate file")
-	grpcAddr := flag.String("grpc-addr", ":8443", "gRPC listen address")
-	httpAddr := flag.String("http-addr", ":8080", "REST API listen address")
+	grpcAddr      := flag.String("grpc-addr",       ":8443", "gRPC TLS listen address")
+	grpcPlainAddr := flag.String("grpc-plain-addr", ":8444", "gRPC plaintext listen address (bootstrap)")
+	httpAddr      := flag.String("http-addr",       ":8080", "REST API listen address")
 	testCertTTL := flag.Duration("test-cert-ttl", 0, "Override cert TTL for testing (e.g. 30s). 0 = use default 24h.")
 	// Note: controller-runtime registers --kubeconfig globally via init().
 	// We must NOT redefine it — read it via flag.Lookup after Parse.
@@ -141,6 +142,7 @@ func main() {
 				RootCAPEM:      issued.RootCAPEM,
 				ExpiresAtUnix:  issued.ExpiresAt.Unix(),
 				RotateAtUnix:   issued.RotateAt.Unix(),
+				KeyPEM:         issued.KeyPEM,
 			})
 		}
 	}
@@ -215,8 +217,7 @@ func main() {
 							ServiceCertPEM: issued.CertPEM,
 							RootCAPEM:      issued.RootCAPEM,
 							ExpiresAtUnix:  issued.ExpiresAt.Unix(),
-							RotateAtUnix:   issued.RotateAt.Unix(),
-						})
+							RotateAtUnix:   issued.RotateAt.Unix(),								KeyPEM:         issued.KeyPEM,						})
 					}
 				}
 			}
@@ -226,6 +227,14 @@ func main() {
 	go func() {
 		if err := dist.ListenAndServe(ctx, *grpcAddr, grpc.Creds(grpcTLSOpt)); err != nil {
 			errCh <- fmt.Errorf("grpc: %w", err)
+		}
+	}()
+
+	// Plaintext gRPC for bootstrap: kprobe agents connect here to get their
+	// first CertBundle before they have a client cert for mTLS.
+	go func() {
+		if err := dist.ListenAndServe(ctx, *grpcPlainAddr); err != nil {
+			errCh <- fmt.Errorf("grpc-plain: %w", err)
 		}
 	}()
 
@@ -286,6 +295,7 @@ func handleServiceEvent(
 		RootCAPEM:      issued.RootCAPEM,
 		ExpiresAtUnix:  issued.ExpiresAt.Unix(),
 		RotateAtUnix:   issued.RotateAt.Unix(),
+		KeyPEM:         issued.KeyPEM,
 	})
 }
 

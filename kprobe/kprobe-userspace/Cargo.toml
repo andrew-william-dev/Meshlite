@@ -37,7 +37,8 @@ env_logger = "0.11"
 clap = { version = "4", features = ["derive", "env"] }
 
 # Pure-Rust ECDSA P-256 key generation (used at startup to generate node key)
-rcgen = "0.13"
+# Use ring backend to match rustls; disable aws-lc-rs default to avoid dual-CryptoProvider panic
+rcgen = { version = "0.13", default-features = false, features = ["pem", "ring"] }
 
 [build-dependencies]
 tonic-build = "0.12"

@@ -13,7 +13,6 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
 use tokio::signal;
 use clap::Parser;
-use rcgen::KeyPair;
 
 use kprobe_userspace::{
     cert_store::CertStore,
@@ -68,6 +67,12 @@ struct PacketLog {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Install ring as the process-level rustls CryptoProvider before any TLS operations.
+    // Without this, rustls panics when both ring and aws-lc-rs features are present.
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("Failed to install ring as the default rustls CryptoProvider");
+
     env_logger::init();
 
     let cli = Cli::parse();
@@ -94,18 +99,6 @@ async fn main() -> Result<()> {
         info!("[kprobe] clsact qdisc already present on {} — continuing", cli.iface);
     }
 
-    // ── 3. Load and attach TC classifier ─────────────────────────────────────
-    let program: &mut SchedClassifier = ebpf
-        .program_mut("kprobe_egress")
-        .context("Program 'kprobe_egress' not found in eBPF object")?
-        .try_into()
-        .context("'kprobe_egress' is not a SchedClassifier program")?;
-    program.load().context("Kernel rejected the eBPF program (verifier error)")?;
-    program.attach(&cli.iface, TcAttachType::Egress)
-        .context("Failed to attach TC classifier to egress hook")?;
-
-    info!("[kprobe] eBPF program loaded on {} — intercepting pod-to-pod traffic", cli.iface);
-
     // ── 4. Open shared eBPF maps ──────────────────────────────────────────────
     let verdict_map = Arc::new(Mutex::new(
         AyaHashMap::<_, kprobe_userspace::verdict_sync::PacketKey, u8>::try_from(
@@ -123,12 +116,31 @@ async fn main() -> Result<()> {
         .context("Failed to open POLICY_FLAGS as Array")?,
     ));
 
+    // Start with allow-all so kprobe can bootstrap its connections to the
+    // k8s API and Sigil. VerdictSync overwrites this once a PolicyBundle arrives.
+    {
+        let mut pf = policy_flags.lock().unwrap();
+        pf.set(0, 1u32, 0).context("Failed to initialise POLICY_FLAGS[0] to allow-all")?;
+    }
+    info!("[kprobe] POLICY_FLAGS[0] set to allow-all (bootstrap mode)");
+
+    // ── 3. Load and attach TC classifier ─────────────────────────────────────
+    let program: &mut SchedClassifier = ebpf
+        .program_mut("kprobe_egress")
+        .context("Program 'kprobe_egress' not found in eBPF object")?
+        .try_into()
+        .context("'kprobe_egress' is not a SchedClassifier program")?;
+    program.load().context("Kernel rejected the eBPF program (verifier error)")?;
+    program.attach(&cli.iface, TcAttachType::Egress)
+        .context("Failed to attach TC classifier to egress hook")?;
+
+    info!("[kprobe] eBPF program loaded on {} — intercepting pod-to-pod traffic", cli.iface);
+
     // ── 5. Set up shared state ────────────────────────────────────────────────
     //
-    // Generate an ephemeral ECDSA key for this agent's SPIFFE identity.
-    // Sigil signs a leaf cert against it; we store that cert in CertStore.
-    let local_key_pem = generate_ecdsa_key_pem()?;
-    let cert_store   = Arc::new(Mutex::new(CertStore::new(local_key_pem)));
+    // CertStore is seeded by the first CertBundle pushed by Sigil; the leaf
+    // cert and private key both come from Sigil (no local key generation needed).
+    let cert_store   = Arc::new(Mutex::new(CertStore::new()));
     let policy_cache = Arc::new(Mutex::new(PolicyCache::new()));
 
     // sync_tx fires whenever CertStore or PolicyCache is updated,
@@ -154,7 +166,7 @@ async fn main() -> Result<()> {
         cli.sigil_addr.clone(),
         cli.node_id.clone(),
         cli.cluster_id.clone(),
-        vec![], // pod_service_ids updated dynamically via PodWatcher
+        Arc::clone(&pod_snapshot),
     );
     let cert_store_sig   = Arc::clone(&cert_store);
     let policy_cache_sig = Arc::clone(&policy_cache);
@@ -225,10 +237,18 @@ async fn main() -> Result<()> {
                     };
                     let verdict = if log.verdict == 0 { "ALLOW" } else { "DENY" };
 
-                    println!(
-                        "[INTERCEPT] src={}:{} dst={}:{} proto={} verdict={}",
-                        src, log.src_port, dst, log.dst_port, proto, verdict
-                    );
+                    // Only log pod-to-pod traffic (10.244.0.0/16).
+                    // Node traffic (172.18.x.x kubelet heartbeats) generates
+                    // ~200 k+ lines/hour, overflowing the k8s log buffer and
+                    // evicting startup/state-machine messages.
+                    let s = src.octets();
+                    let d = dst.octets();
+                    if (s[0] == 10 && s[1] == 244) || (d[0] == 10 && d[1] == 244) {
+                        println!(
+                            "[INTERCEPT] src={}:{} dst={}:{} proto={} verdict={}",
+                            src, log.src_port, dst, log.dst_port, proto, verdict
+                        );
+                    }
                 }
             }
         });
@@ -242,13 +262,3 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-// ─── Key generation ──────────────────────────────────────────────────────────
-
-/// Generate a fresh ECDSA P-256 private key in PKCS#8 PEM format.
-/// This key is ephemeral — discarded when the process exits.
-/// Uses pure-Rust rcgen so no external binary is required in the container.
-fn generate_ecdsa_key_pem() -> Result<Vec<u8>> {
-    let key_pair = KeyPair::generate()
-        .map_err(|e| anyhow::anyhow!("ECDSA key generation failed: {}", e))?;
-    Ok(key_pair.serialize_pem().into_bytes())
-}

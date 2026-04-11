@@ -1,0 +1,16 @@
+mesh:
+  name: meshlite-dev
+  cluster_id: dev
+services:
+  - name: service-alpha
+    namespace: meshlite-test
+  - name: service-beta
+    namespace: meshlite-test
+policy:
+  mtls: enforce
+  default_allow: false
+  allow:
+    - from: service-alpha
+      to: [service-beta]
+    - from: service-beta
+      to: [service-alpha]

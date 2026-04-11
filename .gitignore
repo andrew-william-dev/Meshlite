@@ -4,7 +4,11 @@
 
 # ─── Go build output ─────────────────────────────────────────────────────────
 sigil/sigil
+sigil/server
 sigil/*.test
+sigil/sigil.pb.go
+sigil/sigil_grpc.pb.go
+kprobe-build.log
 meshctl/meshctl
 conduit/conduit
 trace/backend/*.test

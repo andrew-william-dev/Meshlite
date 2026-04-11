@@ -11,6 +11,7 @@ fullnameOverride: ""
 service:
   type: ClusterIP
   grpcPort: 8443
+  grpcPlainPort: 8444
   httpPort: 8080
 
 # Path to the mesh.yaml ConfigMap key mounted into the pod

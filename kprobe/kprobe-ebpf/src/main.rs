@@ -121,9 +121,11 @@ fn try_intercept(ctx: &TcContext) -> Result<i32, ()> {
     let src_port_be: u16 = ctx.load(34).map_err(|_| ())?;
     let dst_port_be: u16 = ctx.load(36).map_err(|_| ())?;
 
-    // 5. Verdict decision — only for traffic originating from the pod CIDR.
-    //    Node traffic (kubelet heartbeats, etc.) always passes through.
-    let verdict: u8 = if src_ip & POD_CIDR_MASK == POD_CIDR_NET {
+    // 5. Verdict decision — only for pod-to-pod traffic (BOTH src AND dst in
+    //    pod CIDR).  Traffic to/from node IPs (kubelet, kube-proxy DNAT
+    //    SYN-ACKs, Sigil ClusterIP responses, etc.) always passes through.
+    let verdict: u8 = if src_ip & POD_CIDR_MASK == POD_CIDR_NET
+                      && dst_ip & POD_CIDR_MASK == POD_CIDR_NET {
         let key = PacketKey { src_ip, dst_ip };
         match unsafe { VERDICT_MAP.get(&key) } {
             Some(v) => *v,     // explicit allow (0) or deny (1)
@@ -137,6 +139,24 @@ fn try_intercept(ctx: &TcContext) -> Result<i32, ()> {
         }
     } else {
         0 // non-pod traffic always allowed
+    };
+
+    // 5b. For TCP: only DENY new connection initiations (SYN without ACK).
+    //     Established-flow packets (ACK set) are always allowed so that return
+    //     traffic for permitted connections is not inadvertently blocked by the
+    //     egress hook on the responding node.
+    //     TCP flags are at offset 47 in a standard 14-byte Ethernet + 20-byte
+    //     IPv4 (IHL=5, no options) + TCP frame.
+    let verdict = if proto == 6 && verdict == 1 {
+        match ctx.load::<u8>(47) {
+            Ok(tcp_flags) => {
+                // SYN=0x02, ACK=0x10 — new SYN has SYN set and ACK not set
+                if (tcp_flags & 0x12) == 0x02 { 1 } else { 0 }
+            }
+            Err(_) => 0, // cannot read flags → be conservative, allow
+        }
+    } else {
+        verdict
     };
 
     let action = if verdict == 1 { TC_ACT_SHOT } else { TC_ACT_OK };

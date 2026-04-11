@@ -34,6 +34,7 @@ type CertBundle struct {
 	RootCAPEM      []byte
 	ExpiresAtUnix  int64
 	RotateAtUnix   int64
+	KeyPEM         []byte // PKCS#8 private key PEM for the leaf cert
 }
 
 // PolicySnapshot is the current policy state, ready to push.
@@ -171,6 +172,7 @@ func (d *Distributor) PushCert(nodeID string, cb CertBundle) {
 				RootCaPem:      cb.RootCAPEM,
 				ExpiresAtUnix:  cb.ExpiresAtUnix,
 				RotateAtUnix:   cb.RotateAtUnix,
+				KeyPem:         cb.KeyPEM,
 			},
 		},
 	}

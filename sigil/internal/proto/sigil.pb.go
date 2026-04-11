@@ -29,6 +29,7 @@ type CertBundle struct {
 	RootCaPem      []byte                 `protobuf:"bytes,3,opt,name=root_ca_pem,json=rootCaPem,proto3" json:"root_ca_pem,omitempty"`                // Sigil root CA cert in PEM format
 	ExpiresAtUnix  int64                  `protobuf:"varint,4,opt,name=expires_at_unix,json=expiresAtUnix,proto3" json:"expires_at_unix,omitempty"`   // Unix timestamp of leaf cert expiry
 	RotateAtUnix   int64                  `protobuf:"varint,5,opt,name=rotate_at_unix,json=rotateAtUnix,proto3" json:"rotate_at_unix,omitempty"`      // Proactive rotation hint (expires_at - 20%)
+	KeyPem         []byte                 `protobuf:"bytes,6,opt,name=key_pem,json=keyPem,proto3" json:"key_pem,omitempty"`                           // PKCS#8 private key PEM for the leaf cert
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -96,6 +97,13 @@ func (x *CertBundle) GetRotateAtUnix() int64 {
 		return x.RotateAtUnix
 	}
 	return 0
+}
+
+func (x *CertBundle) GetKeyPem() []byte {
+	if x != nil {
+		return x.KeyPem
+	}
+	return nil
 }
 
 // PolicyBundle is pushed to all connected agents on config change.
@@ -456,7 +464,7 @@ var File_sigil_proto protoreflect.FileDescriptor
 
 const file_sigil_proto_rawDesc = "" +
 	"\n" +
-	"\vsigil.proto\x12\bsigil.v1\"\xc3\x01\n" +
+	"\vsigil.proto\x12\bsigil.v1\"\xdc\x01\n" +
 	"\n" +
 	"CertBundle\x12\x1d\n" +
 	"\n" +
@@ -464,7 +472,8 @@ const file_sigil_proto_rawDesc = "" +
 	"\x10service_cert_pem\x18\x02 \x01(\fR\x0eserviceCertPem\x12\x1e\n" +
 	"\vroot_ca_pem\x18\x03 \x01(\fR\trootCaPem\x12&\n" +
 	"\x0fexpires_at_unix\x18\x04 \x01(\x03R\rexpiresAtUnix\x12$\n" +
-	"\x0erotate_at_unix\x18\x05 \x01(\x03R\frotateAtUnix\"{\n" +
+	"\x0erotate_at_unix\x18\x05 \x01(\x03R\frotateAtUnix\x12\x17\n" +
+	"\akey_pem\x18\x06 \x01(\fR\x06keyPem\"{\n" +
 	"\fPolicyBundle\x12)\n" +
 	"\x05rules\x18\x01 \x03(\v2\x13.sigil.v1.AllowRuleR\x05rules\x12#\n" +
 	"\rdefault_allow\x18\x02 \x01(\bR\fdefaultAllow\x12\x1b\n" +

@@ -67,14 +67,15 @@ impl PodWatcher {
         };
 
         let pods: Api<Pod> = Api::all(client);
-        let node = self.node_name.clone();
         let snapshot = Arc::clone(&self.snapshot);
 
-        let config = watcher::Config::default()
-            .fields(&format!("spec.nodeName={}", node));
+        // Watch all pods cluster-wide so VerdictSync can populate cross-node
+        // VERDICT_MAP entries (e.g. service-alpha on worker enforcing traffic to
+        // service-beta on worker2).
+        let config = watcher::Config::default();
         let mut stream = watcher::watcher(pods, config).boxed();
 
-        info!("[pod_watcher] Watching pods on node={}", node);
+        info!("[pod_watcher] Watching all pods cluster-wide (node={})", self.node_name);
 
         while let Some(event) = stream.next().await {
             match event {

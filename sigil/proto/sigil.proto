@@ -13,6 +13,7 @@ message CertBundle {
   bytes  root_ca_pem      = 3; // Sigil root CA cert in PEM format
   int64  expires_at_unix  = 4; // Unix timestamp of leaf cert expiry
   int64  rotate_at_unix   = 5; // Proactive rotation hint (expires_at - 20%)
+  bytes  key_pem          = 6; // PKCS#8 private key PEM for the leaf cert
 }
 
 // PolicyBundle is pushed to all connected agents on config change.
