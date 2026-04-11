@@ -1,0 +1,152 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: meshlite-test
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: validator-ui
+  namespace: meshlite-test
+  labels:
+    app: validator-ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: validator-ui
+  template:
+    metadata:
+      labels:
+        app: validator-ui
+        meshlite.io/service: validator-ui
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values: [validator-same]
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: validator-ui
+          image: meshlite/service-validator:demo
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: SERVICE_NAME
+              value: validator-ui
+            - name: CLUSTER_NAME
+              value: cluster-1
+            - name: SAME_TARGET_NAME
+              value: validator-same
+            - name: SAME_TARGET_URL
+              value: http://validator-same.meshlite-test.svc.cluster.local:8080/api/ping
+            - name: CROSS_TARGET_NAME
+              value: validator-cross
+            - name: CROSS_TARGET_URL
+              value: http://conduit-egress-conduit.meshlite-system.svc.cluster.local:9090/api/ping
+            - name: CROSS_TARGET_HOST
+              value: validator-cross
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: validator-ui
+  namespace: meshlite-test
+spec:
+  selector:
+    app: validator-ui
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: validator-same
+  namespace: meshlite-test
+  labels:
+    app: validator-same
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: validator-same
+  template:
+    metadata:
+      labels:
+        app: validator-same
+        meshlite.io/service: validator-same
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values: [validator-ui]
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: validator-same
+          image: meshlite/service-validator:demo
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: SERVICE_NAME
+              value: validator-same
+            - name: CLUSTER_NAME
+              value: cluster-1
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+          resources:
+            requests:
+              cpu: 50m
+              memory: 48Mi
+            limits:
+              cpu: 200m
+              memory: 96Mi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: validator-same
+  namespace: meshlite-test
+spec:
+  selector:
+    app: validator-same
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080

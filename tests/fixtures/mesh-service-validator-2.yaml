@@ -1,0 +1,24 @@
+mesh:
+  name: service-validator-demo
+  cluster_id: cluster-2
+
+services:
+  - name: validator-ui
+    namespace: meshlite-test
+  - name: validator-same
+    namespace: meshlite-test
+  - name: validator-cross
+    namespace: meshlite-test
+
+policy:
+  mtls: enforce
+  default_allow: false
+  allow:
+    - from: validator-ui
+      to: [validator-cross]
+    - from: conduit
+      to: [sigil, validator-cross, trace]
+    - from: conduit-cluster-1
+      to: [sigil, validator-cross, trace]
+    - from: conduit-cluster-2
+      to: [sigil, validator-ui, validator-same, trace]
