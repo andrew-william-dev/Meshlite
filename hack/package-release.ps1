@@ -6,15 +6,16 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-$repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..')
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $chartRoot = Join-Path $repoRoot 'charts'
+$meshliteChart = Join-Path $chartRoot 'meshlite'
 $destinationPath = Join-Path $repoRoot $Destination
 
 New-Item -ItemType Directory -Force -Path $destinationPath | Out-Null
 
 Push-Location $repoRoot
 try {
-    helm dependency update .\charts\meshlite
+    helm dependency update $meshliteChart
     if ($LASTEXITCODE -ne 0) {
         throw 'helm dependency update failed'
     }

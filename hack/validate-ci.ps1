@@ -14,7 +14,10 @@ function Invoke-Step {
     }
 }
 
-$repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..')
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$chartsRoot = Join-Path $repoRoot 'charts'
+$meshliteChart = Join-Path $chartsRoot 'meshlite'
+$eksExampleValues = Join-Path $meshliteChart 'examples/eks-internal-values.yaml'
 $canRunSigilTests = $true
 $canRunKprobeUserspaceTests = $true
 $runningOnWindows = $env:OS -eq 'Windows_NT'
@@ -69,33 +72,30 @@ try {
 
     Invoke-Step 'helm lint subcharts' {
         Set-Location $repoRoot
-        helm lint .\charts\sigil
-        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        helm lint .\charts\kprobe
-        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        helm lint .\charts\conduit
-        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        helm lint .\charts\trace
+        foreach ($chart in @('sigil', 'kprobe', 'conduit', 'trace')) {
+            helm lint (Join-Path $chartsRoot $chart)
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        }
     }
 
     Invoke-Step 'helm dependency update umbrella chart' {
         Set-Location $repoRoot
-        helm dependency update .\charts\meshlite
+        helm dependency update $meshliteChart
     }
 
     Invoke-Step 'helm lint umbrella chart' {
         Set-Location $repoRoot
-        helm lint .\charts\meshlite
+        helm lint $meshliteChart
     }
 
     Invoke-Step 'helm template umbrella chart' {
         Set-Location $repoRoot
-        $null = helm template meshlite .\charts\meshlite -n meshlite-system
+        $null = helm template meshlite $meshliteChart -n meshlite-system
     }
 
     Invoke-Step 'helm template EKS internal example' {
         Set-Location $repoRoot
-        $null = helm template meshlite .\charts\meshlite -n meshlite-system -f .\charts\meshlite\examples\eks-internal-values.yaml
+        $null = helm template meshlite $meshliteChart -n meshlite-system -f $eksExampleValues
     }
 
     Write-Host "`nVALIDATION_OK" -ForegroundColor Green
