@@ -167,39 +167,60 @@ async fn handle_connection(
     // Forward the buffered request header to the upstream.
     upstream.write_all(header_bytes).await?;
 
-    // Bidirectional pipe.
-    match tokio::io::copy_bidirectional(&mut client, &mut upstream).await {
-        Ok(_) => {
+    // Wait for the first response bytes so telemetry reflects request latency
+    // rather than long-lived HTTP keep-alive connection lifetime.
+    let mut response_buf = vec![0u8; 8192];
+    let response_n = match upstream.read(&mut response_buf).await {
+        Ok(0) => {
             telemetry.emit(TelemetryRecord {
                 source_service: format!("cluster/{cluster_id}"),
-                destination_service: destination,
-                cluster_id,
-                leg: "cross_cluster".into(),
-                verdict: "allow".into(),
-                latency_ms: started.elapsed().as_secs_f64() * 1000.0,
-                tls_verified: true,
-                status_code: Some(200),
-                error_reason: None,
-                timestamp: None,
-            });
-            Ok(())
-        }
-        Err(e) => {
-            telemetry.emit(TelemetryRecord {
-                source_service: format!("cluster/{cluster_id}"),
-                destination_service: destination,
+                destination_service: destination.clone(),
                 cluster_id,
                 leg: "cross_cluster".into(),
                 verdict: "error".into(),
                 latency_ms: started.elapsed().as_secs_f64() * 1000.0,
                 tls_verified: true,
                 status_code: None,
-                error_reason: Some(format!("proxy_failed: {e}")),
+                error_reason: Some("upstream_closed_before_response".into()),
                 timestamp: None,
             });
-            Err(e.into())
+            return Err(anyhow::anyhow!("upstream closed before sending a response"));
         }
-    }
+        Ok(n) => n,
+        Err(e) => {
+            telemetry.emit(TelemetryRecord {
+                source_service: format!("cluster/{cluster_id}"),
+                destination_service: destination.clone(),
+                cluster_id,
+                leg: "cross_cluster".into(),
+                verdict: "error".into(),
+                latency_ms: started.elapsed().as_secs_f64() * 1000.0,
+                tls_verified: true,
+                status_code: None,
+                error_reason: Some(format!("read_response_failed: {e}")),
+                timestamp: None,
+            });
+            return Err(e.into());
+        }
+    };
+
+    client.write_all(&response_buf[..response_n]).await?;
+
+    telemetry.emit(TelemetryRecord {
+        source_service: format!("cluster/{cluster_id}"),
+        destination_service: destination,
+        cluster_id,
+        leg: "cross_cluster".into(),
+        verdict: "allow".into(),
+        latency_ms: started.elapsed().as_secs_f64() * 1000.0,
+        tls_verified: true,
+        status_code: extract_status_code(&response_buf[..response_n]),
+        error_reason: None,
+        timestamp: None,
+    });
+
+    tokio::io::copy_bidirectional(&mut client, &mut upstream).await?;
+    Ok(())
 }
 
 /// Extract the value of the `Host:` header from raw HTTP bytes.
@@ -218,6 +239,13 @@ fn extract_host(raw: &[u8]) -> Option<String> {
         }
     }
     None
+}
+
+fn extract_status_code(raw: &[u8]) -> Option<u16> {
+    let text = std::str::from_utf8(raw).ok()?;
+    let status_line = text.lines().next()?;
+    let code = status_line.split_whitespace().nth(1)?;
+    code.parse::<u16>().ok()
 }
 
 #[cfg(test)]
@@ -240,5 +268,11 @@ mod tests {
     fn host_extraction_missing() {
         let raw = b"GET / HTTP/1.1\r\nAccept: */*\r\n\r\n";
         assert_eq!(extract_host(raw), None);
+    }
+
+    #[test]
+    fn status_extraction_basic() {
+        let raw = b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK";
+        assert_eq!(extract_status_code(raw), Some(200));
     }
 }

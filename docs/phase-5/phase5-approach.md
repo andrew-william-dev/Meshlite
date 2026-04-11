@@ -19,7 +19,7 @@ Prove that MeshLite’s enforcement path is now **observable and operable** end 
 | Telemetry emission in `kprobe` | Add best-effort telemetry emission from `kprobe-userspace` for same-cluster allow / deny / TLS-failure events, including source, destination, cluster, verdict, and latency |
 | Telemetry emission in `conduit` | Add boundary telemetry for cross-cluster allow / deny / handshake outcomes, classified with `leg = cross_cluster` |
 | Trace backend (`trace/backend/`) | New Go service that accepts telemetry over HTTP/JSON, aggregates in memory, exposes Prometheus `/metrics`, and serves JSON APIs for the UI |
-| Trace frontend (`trace/frontend/`) | React + TypeScript + Vite dashboard with a **Rancher-inspired** operator layout: left navigation, summary cards, traffic table, service graph, and recent denial / TLS-failure events |
+| Trace frontend (`trace/frontend/`) | React + TypeScript + Vite dashboard with an **application-first** operator layout: focused navigation, summary cards, traffic table, service graph, and recent denial / TLS-failure events |
 | Trace deployment (`charts/trace/`) | Helm chart to deploy the backend and serve the built frontend inside the cluster |
 | Private Trace access mode | Support internal/private-domain deployment of Trace for the MVP **without app-level auth**, using cluster ingress/load balancer + network restrictions as the access boundary |
 | `meshctl` CLI (`meshctl/`) | Implement `apply`, `status`, `verify`, `logs`, `rotate`, and `version` commands using the existing Sigil / Trace HTTP APIs |
@@ -87,7 +87,7 @@ For this phase, state may remain **in memory only**. A restart may clear the liv
 
 ### 3.3 Trace frontend (`trace/frontend/`)
 
-The dashboard will use **React + TypeScript + Vite** with a **Rancher-inspired, operator-first layout**:
+The dashboard will use **React + TypeScript + Vite** with an **application-first, operator-friendly layout**:
 
 - **Left navigation + top summary bar** — familiar admin-console structure for clusters, traffic, and policy visibility
 - **Overview graph** — service nodes and traffic edges, coloured by health / denial rate
@@ -99,9 +99,9 @@ Implementation preference:
 
 - `React Flow` for the service map
 - simple polling (2–5 seconds) against the backend JSON APIs
-- Tailwind for fast styling and a neutral enterprise/admin feel similar to Rancher
+- Fast styling with a neutral enterprise/admin feel tailored to MeshLite
 
-A fast, readable operator UI is the goal — not animation-heavy visual polish or feature-for-feature Rancher parity.
+A fast, readable operator UI is the goal — not animation-heavy visual polish or feature-for-feature mimicry of another platform.
 
 ### 3.4 `meshctl` CLI (`meshctl/`)
 

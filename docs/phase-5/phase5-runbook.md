@@ -193,7 +193,7 @@ go build ./...
 
 ### Step 5.3 — Build the Trace frontend with React + TypeScript + Vite
 
-**Goal:** Render a usable **Rancher-inspired** operator dashboard backed by the Trace JSON APIs.
+**Goal:** Render a usable **application-first** operator dashboard backed by the Trace JSON APIs.
 
 **Files to create / modify:**
 
@@ -211,7 +211,7 @@ go build ./...
 
 **UI requirements:**
 
-- Rancher-inspired layout with left navigation, top summary cards, and a clean enterprise/admin visual style
+- Application-first layout with focused navigation, summary cards, and a clean enterprise/admin visual style
 - Graph view shows services as nodes and traffic as edges
 - Edge state distinguishes healthy traffic from denial-heavy flows
 - Summary shows request totals and latency percentiles

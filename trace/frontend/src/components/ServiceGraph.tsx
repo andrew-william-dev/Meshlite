@@ -1,65 +1,117 @@
-import { Background, Controls, MiniMap, ReactFlow, type Edge, type Node } from '@xyflow/react';
+import { Background, Controls, MarkerType, MiniMap, ReactFlow, type Edge, type Node } from '@xyflow/react';
 import type { Topology } from '../lib/api';
 
 type Props = {
   topology: Topology;
+  viewLabel: string;
+  focusService?: string;
 };
 
-export function ServiceGraph({ topology }: Props) {
-  if (topology.nodes.length === 0) {
+export function ServiceGraph({ topology, viewLabel, focusService }: Props) {
+  if (topology.nodes.length === 0 || topology.edges.length === 0) {
     return (
       <div className="panel empty-state">
         <h3>Service graph</h3>
-        <p>No telemetry has arrived yet. Generate traffic to populate the topology.</p>
+        <p>No service journeys match this view yet. Generate demo traffic to populate the topology.</p>
       </div>
     );
   }
 
-  const nodes: Node[] = topology.nodes.map((node, index) => ({
-    id: node.id,
-    position: {
-      x: 80 + (index % 3) * 240,
-      y: 60 + Math.floor(index / 3) * 140,
-    },
-    data: {
-      label: `${node.label}${node.cluster_id ? ` (${node.cluster_id})` : ''}`,
-    },
-    style: {
-      background: '#fff',
-      color: '#11284b',
-      border: '1px solid #cbd5e1',
-      borderRadius: 12,
-      padding: 8,
-      minWidth: 150,
-      fontWeight: 600,
-      boxShadow: '0 4px 18px rgba(15, 23, 42, 0.08)',
-    },
-  }));
+  const clusters = [...new Set(topology.nodes.map((node) => node.cluster_id || 'shared'))];
+  const clusterPositions = new Map(clusters.map((cluster, index) => [cluster, index]));
+  const laneOffsets = new Map<string, number>();
+
+  const nodes: Node[] = topology.nodes.map((node) => {
+    const cluster = node.cluster_id || 'shared';
+    const laneIndex = clusterPositions.get(cluster) ?? 0;
+    const rowIndex = laneOffsets.get(cluster) ?? 0;
+    laneOffsets.set(cluster, rowIndex + 1);
+
+    const isFocused = focusService === node.id;
+    return {
+      id: node.id,
+      position: {
+        x: 120 + laneIndex * 320,
+        y: 80 + rowIndex * 110,
+      },
+      data: {
+        label: node.cluster_id ? `${node.label}\n${node.cluster_id}` : node.label,
+      },
+      style: {
+        background: isFocused ? '#dbeafe' : '#fff',
+        color: '#0f172a',
+        border: isFocused ? '2px solid #2563eb' : '1px solid #cbd5e1',
+        borderRadius: 16,
+        padding: 12,
+        minWidth: 180,
+        fontWeight: 700,
+        whiteSpace: 'pre-line',
+        boxShadow: isFocused
+          ? '0 10px 24px rgba(37, 99, 235, 0.18)'
+          : '0 8px 20px rgba(15, 23, 42, 0.08)',
+      },
+    };
+  });
 
   const edges: Edge[] = topology.edges.map((edge, index) => {
-    const isHealthy = edge.deny_count === 0 && edge.tls_rejects === 0 && edge.error_count === 0;
-    const color = isHealthy ? '#22c55e' : edge.deny_count > 0 ? '#f59e0b' : '#ef4444';
+    const issueCount = edge.deny_count + edge.tls_rejects + edge.error_count;
+    const color = issueCount === 0
+      ? edge.leg === 'cross_cluster' ? '#2563eb' : '#16a34a'
+      : edge.deny_count > 0 ? '#f59e0b' : '#ef4444';
+
     return {
       id: `${edge.source}-${edge.target}-${index}`,
       source: edge.source,
       target: edge.target,
+      type: 'smoothstep',
       animated: edge.requests > 0,
-      label: `${edge.leg} · ${edge.requests} req`,
-      style: { stroke: color, strokeWidth: Math.min(6, Math.max(2, edge.requests / 10 + 2)) },
-      labelStyle: { fill: '#334155', fontWeight: 600 },
+      label: `${edge.requests} req · p95 ${edge.p95_ms.toFixed(1)} ms`,
+      markerEnd: {
+        type: MarkerType.ArrowClosed,
+        color,
+      },
+      style: {
+        stroke: color,
+        strokeWidth: Math.min(6, Math.max(2.5, edge.requests / 12 + 2)),
+      },
+      labelStyle: {
+        fill: '#0f172a',
+        fontWeight: 700,
+        fontSize: 12,
+      },
     };
   });
 
   return (
     <div className="panel graph-panel">
       <div className="panel-header">
-        <h3>Service graph</h3>
-        <span className="panel-pill">Rancher-inspired topology view</span>
+        <div>
+          <h3>Service graph</h3>
+          <p className="panel-copy">Grouped by cluster and trimmed to the journeys that matter for this view.</p>
+        </div>
+        <span className="panel-pill">{viewLabel}</span>
       </div>
+
+      <div className="graph-legend">
+        {clusters.map((cluster) => (
+          <span className="legend-pill" key={cluster}>
+            {cluster === 'shared' ? 'shared context' : cluster}
+          </span>
+        ))}
+      </div>
+
       <div className="graph-frame">
-        <ReactFlow nodes={nodes} edges={edges} fitView>
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          fitView
+          nodesDraggable={false}
+          nodesConnectable={false}
+          elementsSelectable={false}
+          panOnDrag
+        >
           <MiniMap pannable zoomable />
-          <Controls />
+          <Controls showInteractive={false} />
           <Background gap={20} size={1} />
         </ReactFlow>
       </div>
