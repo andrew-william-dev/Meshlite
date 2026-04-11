@@ -40,7 +40,7 @@ spec:
       {{- end }}
       containers:
         - name: sigil
-          image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}"
+          image: "{{ .Values.image.repository }}:{{ coalesce .Values.image.tag (get (default (dict) .Values.global) "imageTag") .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
             - --config=/config/{{ .Values.config.meshConfigKey }}
