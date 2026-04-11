@@ -47,6 +47,7 @@ rcgen = { version = "0.13", default-features = false, features = ["pem", "ring"]
 
 [build-dependencies]
 tonic-build = "0.12"
+protoc-bin-vendored = "3"
 
 [[bin]]
 name = "kprobe-loader"
