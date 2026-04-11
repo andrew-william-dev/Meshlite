@@ -1,0 +1,22 @@
+mesh:
+  name: meshlite-cross
+  cluster_id: cluster-2
+
+services:
+  - name: service-alpha
+    namespace: meshlite-test
+  - name: service-beta
+    namespace: meshlite-test
+
+policy:
+  mtls: enforce
+  default_allow: false
+  allow:
+    - from: service-alpha
+      to: [service-beta]
+    - from: conduit
+      to: [sigil, service-alpha]
+    - from: conduit-cluster-1
+      to: [sigil, service-beta]
+    - from: conduit-cluster-2
+      to: [sigil, service-alpha]

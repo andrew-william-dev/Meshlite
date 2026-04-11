@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+# Shared TLS + policy data structures (used by both Kprobe and Conduit)
+meshlite-tls = { path = "../../crates/meshlite-tls" }
+
 # Aya userspace — loads and manages eBPF programs
 aya = { version = "0.13", features = ["async_tokio"] }
 aya-log = "0.2"

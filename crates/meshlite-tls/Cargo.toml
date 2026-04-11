@@ -1,0 +1,9 @@
+[package]
+name = "meshlite-tls"
+version = "0.1.0"
+edition = "2021"
+
+# Pure data structures — cert_store and policy_cache.
+# No network or runtime dependencies; both Kprobe and Conduit depend on this.
+
+[dependencies]

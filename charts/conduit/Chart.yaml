@@ -1,0 +1,6 @@
+apiVersion: v2
+name: conduit
+description: Conduit — MeshLite cross-cluster mTLS gateway
+type: application
+version: 0.1.0
+appVersion: "phase4"

@@ -49,8 +49,8 @@ type PolicyConfig struct {
 
 // AllowRule permits traffic from one service to a set of destination services.
 type AllowRule struct {
-	From string   `yaml:"from"`
-	To   []string `yaml:"to"`
+	From string   `yaml:"from" json:"from"`
+	To   []string `yaml:"to"   json:"to"`
 }
 
 // ServiceDef declares a service managed by the mesh.

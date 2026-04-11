@@ -365,6 +365,38 @@ func registerRoutes(
 		})
 	})
 
+	mux.HandleFunc("POST /api/v1/enroll-cluster", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			ClusterID string `json:"cluster_id"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&req); err != nil {
+			http.Error(w, "invalid JSON body", http.StatusBadRequest)
+			return
+		}
+		defer r.Body.Close()
+		if req.ClusterID == "" {
+			http.Error(w, "cluster_id required", http.StatusBadRequest)
+			return
+		}
+		serviceID := fmt.Sprintf("conduit-%s", req.ClusterID)
+		issued, err := authority.IssueWithDNS(serviceID, req.ClusterID, "meshlite-system", []string{
+			req.ClusterID,
+			serviceID,
+			"localhost",
+		})
+		if err != nil {
+			http.Error(w, fmt.Sprintf("issue failed: %v", err), http.StatusInternalServerError)
+			return
+		}
+		logger.Info("[sigil] cluster enrolled", "cluster_id", req.ClusterID, "service_id", serviceID)
+		writeJSON(w, map[string]any{
+			"cert_pem":        string(issued.CertPEM),
+			"key_pem":         string(issued.KeyPEM),
+			"root_ca_pem":     string(issued.RootCAPEM),
+			"expires_at_unix": issued.ExpiresAt.Unix(),
+		})
+	})
+
 	mux.HandleFunc("POST /api/v1/config", func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20)) // 1 MB limit
 		if err != nil {

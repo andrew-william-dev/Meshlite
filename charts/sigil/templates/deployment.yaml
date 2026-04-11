@@ -16,6 +16,24 @@ spec:
         app: sigil
     spec:
       serviceAccountName: {{ include "sigil.fullname" . }}
+      {{- if .Values.existingRootCASecret }}
+      initContainers:
+        - name: import-root-ca
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              cp /secrets/root.crt {{ .Values.persistence.mountPath }}/root.crt
+              cp /secrets/root.key {{ .Values.persistence.mountPath }}/root.key
+              echo "Root CA imported from secret"
+          volumeMounts:
+            - name: data
+              mountPath: {{ .Values.persistence.mountPath }}
+            - name: root-ca-secret
+              mountPath: /secrets
+              readOnly: true
+      {{- end }}
       containers:
         - name: sigil
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -53,3 +71,8 @@ spec:
         - name: config
           configMap:
             name: {{ .Values.config.meshConfigMap }}
+        {{- if .Values.existingRootCASecret }}
+        - name: root-ca-secret
+          secret:
+            secretName: {{ .Values.existingRootCASecret }}
+        {{- end }}

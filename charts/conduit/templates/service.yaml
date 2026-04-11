@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "conduit.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: conduit
+    conduit/mode: {{ .Values.mode | quote }}
+spec:
+  {{- if eq .Values.mode "ingress" }}
+  type: NodePort
+  {{- else }}
+  type: ClusterIP
+  {{- end }}
+  selector:
+    app: conduit
+    conduit/mode: {{ .Values.mode | quote }}
+  ports:
+    {{- if eq .Values.mode "egress" }}
+    - port: {{ .Values.egress.listenPort }}
+      targetPort: proxy
+      name: proxy
+    {{- else }}
+    - port: {{ .Values.ingress.listenPort }}
+      targetPort: tls
+      name: tls
+      nodePort: 30443
+    {{- end }}

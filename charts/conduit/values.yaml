@@ -1,0 +1,28 @@
+image:
+  repository: meshlite/conduit
+  pullPolicy: IfNotPresent
+  tag: "phase4"
+
+# "egress" or "ingress"
+mode: egress
+
+cluster:
+  id: "cluster-1"
+
+sigil:
+  addr: "sigil.meshlite-system.svc.cluster.local:8080"
+
+# Egress: address of the remote Ingress NodePort (host:port)
+peer:
+  addr: ""
+
+# Ingress: port on which backend services are listening
+svc:
+  port: 8080
+  domainSuffix: ".meshlite-test.svc.cluster.local"
+
+egress:
+  listenPort: 9090
+
+ingress:
+  listenPort: 443

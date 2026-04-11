@@ -1,0 +1,38 @@
+# Cross-cluster mesh configuration used in Phase 4 tests (Tests 4.A–4.H).
+#
+# cluster-1 (meshlite-dev) hosts service-alpha and the Conduit Egress.
+# cluster-2 (meshlite-dev-2) hosts service-beta and the Conduit Ingress.
+#
+# Both clusters share a Sigil CA so the root CA PEM is identical and mTLS
+# between conduit-cluster-1 (Egress) and conduit-cluster-2 (Ingress) validates.
+#
+# Apply to cluster-1's Sigil:
+#   KUBECONFIG=~/.kube/cluster-1.yaml meshctl apply -f tests/fixtures/mesh-cross-cluster.yaml
+# Apply to cluster-2's Sigil:
+#   KUBECONFIG=~/.kube/cluster-2.yaml meshctl apply -f tests/fixtures/mesh-cross-cluster.yaml
+
+mesh:
+  name: meshlite-cross
+  cluster_id: cluster-1
+
+services:
+  - name: service-alpha
+    namespace: meshlite-test
+  - name: service-beta
+    namespace: meshlite-test
+
+policy:
+  mtls: enforce
+  default_allow: false
+  allow:
+    - from: service-alpha
+      to: [service-beta]
+    # The Kubernetes-observed service identity for the Deployment is "conduit".
+    # It must be allowed to reach Sigil for enrollment / policy polling.
+    - from: conduit
+      to: [sigil, service-beta]
+    # Enrolled cross-cluster identities are also documented explicitly.
+    - from: conduit-cluster-1
+      to: [sigil, service-beta]
+    - from: conduit-cluster-2
+      to: [sigil, service-alpha]

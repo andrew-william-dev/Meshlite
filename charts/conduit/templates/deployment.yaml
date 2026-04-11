@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "conduit.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: conduit
+    conduit/mode: {{ .Values.mode | quote }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: conduit
+      conduit/mode: {{ .Values.mode | quote }}
+  template:
+    metadata:
+      labels:
+        app: conduit
+        conduit/mode: {{ .Values.mode | quote }}
+    spec:
+      serviceAccountName: {{ include "conduit.fullname" . }}
+      containers:
+        - name: conduit
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: CONDUIT_MODE
+              value: {{ .Values.mode | quote }}
+            - name: CONDUIT_CLUSTER_ID
+              value: {{ .Values.cluster.id | quote }}
+            - name: CONDUIT_SIGIL_ADDR
+              value: {{ .Values.sigil.addr | quote }}
+            - name: CONDUIT_PEER_ADDR
+              value: {{ .Values.peer.addr | quote }}
+            - name: CONDUIT_SVC_DOMAIN_SUFFIX
+              value: {{ .Values.svc.domainSuffix | quote }}
+            - name: CONDUIT_SVC_PORT
+              value: {{ .Values.svc.port | quote }}
+            {{- if eq .Values.mode "egress" }}
+            - name: CONDUIT_LISTEN_ADDR
+              value: ":{{ .Values.egress.listenPort }}"
+            {{- else }}
+            - name: CONDUIT_LISTEN_ADDR
+              value: ":{{ .Values.ingress.listenPort }}"
+            {{- end }}
+            - name: RUST_LOG
+              value: "info"
+          ports:
+            {{- if eq .Values.mode "egress" }}
+            - containerPort: {{ .Values.egress.listenPort }}
+              name: proxy
+            {{- else }}
+            - containerPort: {{ .Values.ingress.listenPort }}
+              name: tls
+            {{- end }}
