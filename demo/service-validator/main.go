@@ -251,6 +251,9 @@ func newAppFromEnv() *app {
 		crossTargetHost: os.Getenv("CROSS_TARGET_HOST"),
 		client: &http.Client{
 			Timeout: 5 * time.Second,
+			Transport: &http.Transport{
+				DisableKeepAlives: true,
+			},
 		},
 		tpl: template.Must(template.New("page").Parse(pageHTML)),
 	}
@@ -348,6 +351,8 @@ func (a *app) callTarget(kind string) callResult {
 		req.Host = hostHeader
 		req.Header.Set("Host", hostHeader)
 	}
+	req.Close = true
+	req.Header.Set("Connection", "close")
 	req.Header.Set("User-Agent", "meshlite-service-validator/1.0")
 	req.Header.Set("X-MeshLite-Demo-Caller", a.serviceName)
 
