@@ -16,75 +16,129 @@ function useLatestRelease() {
   return state;
 }
 
-// ─── 3D Mesh Canvas ───────────────────────────────────────────────────────────
-function MeshCanvas() {
+// ─── Hero Topology Canvas ─────────────────────────────────────────────────────
+// Shows the 4 MeshLite components (Sigil center + 3 satellites) with animated
+// data-flow particles on each edge. Sigil has two orbiting rings to indicate
+// its role as the CA. Background starfield adds depth.
+function TopologyCanvas() {
   const ref = useRef(null);
   useEffect(() => {
     const canvas = ref.current;
     if (!canvas) return;
     let animId;
-    const W = canvas.clientWidth || 520;
-    const H = canvas.clientHeight || 480;
+    const W = canvas.clientWidth || 540;
+    const H = canvas.clientHeight || 460;
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(52, W / H, 0.1, 100);
-    camera.position.set(0, 0, 7);
+    const camera = new THREE.PerspectiveCamera(44, W / H, 0.1, 100);
+    camera.position.set(0, 0.5, 9.5);
+    camera.lookAt(0, 0, 0);
     const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
     renderer.setSize(W, H);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setClearColor(0x000000, 0);
 
-    // [x, y, z, hexColor, radius]
-    const ND = [
-      [0,    0,    0,    0x3dd68c, 0.22], // 0 Sigil
-      [-1.8, 0.6,  0.5,  0x6fb6ff, 0.14], // 1 Kprobe-A
-      [1.5,  -0.8, 0.3,  0x6fb6ff, 0.14], // 2 Kprobe-B
-      [-0.4, 1.9,  -0.3, 0xb898ff, 0.14], // 3 Conduit
-      [1.9,  1.3,  -0.4, 0x4ade9e, 0.13], // 4 Trace
-      [-1.5, -1.6, 0.2,  0x3a6070, 0.09], // 5 svc-a
-      [0.7,  -1.9, 0.5,  0x3a6070, 0.09], // 6 svc-b
-      [-0.2, 0.8,  1.9,  0x3a6070, 0.09], // 7 svc-c
-    ];
-    const EDGES = [[0,1],[0,2],[0,3],[0,4],[1,5],[2,6],[1,7],[4,2],[3,0]];
+    // Lighting — ambient + teal point light pulsing from Sigil center
+    scene.add(new THREE.AmbientLight(0x334466, 0.75));
+    const sigilLight = new THREE.PointLight(0x3dd68c, 2.2, 11);
+    sigilLight.position.set(0, 0, 2);
+    scene.add(sigilLight);
 
     const group = new THREE.Group();
     scene.add(group);
 
-    const nodeMeshes = ND.map(([x,y,z,col,r]) => {
-      const g = new THREE.SphereGeometry(r, 22, 22);
-      const m = new THREE.MeshBasicMaterial({ color: col });
-      const mesh = new THREE.Mesh(g, m);
+    // Starfield (not in group so it rotates slower via separate assignment)
+    const starGeo = new THREE.BufferGeometry();
+    const starPos = new Float32Array(900);
+    for (let i = 0; i < 900; i += 3) {
+      starPos[i]     = (Math.random() - 0.5) * 28;
+      starPos[i + 1] = (Math.random() - 0.5) * 22;
+      starPos[i + 2] = (Math.random() - 0.5) * 8 - 6;
+    }
+    starGeo.setAttribute("position", new THREE.BufferAttribute(starPos, 3));
+    const starField = new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0x3a5a70, size: 0.05, transparent: true, opacity: 0.55 }));
+    scene.add(starField);
+
+    // [x, y, z, hexColor, radius, isComponent]
+    const NODES = [
+      [ 0,    0,    0,    0x3dd68c, 0.30, true],   // 0 Sigil  — CA, center
+      [-2.2, -1.1,  0.3,  0xf97e6f, 0.20, true],   // 1 Kprobe — eBPF enforcer
+      [ 2.2, -1.1, -0.3,  0xb898ff, 0.20, true],   // 2 Conduit— cross-cluster gateway
+      [ 0,    2.4,  0,    0x4ade9e, 0.18, true],   // 3 Trace  — observability
+      [-3.6,  0.8,  0.6,  0x1e3d58, 0.09, false],  // pods
+      [-1.8, -3.0, -0.3,  0x1e3d58, 0.09, false],
+      [ 0.5, -2.9,  0.7,  0x1e3d58, 0.09, false],
+      [ 3.4,  0.5, -0.5,  0x1e3d58, 0.09, false],
+      [ 2.5, -2.7,  0.5,  0x1e3d58, 0.09, false],
+    ];
+
+    const meshes = NODES.map(([x, y, z, col, r, isC]) => {
+      const geo = new THREE.SphereGeometry(r, isC ? 24 : 10, isC ? 24 : 10);
+      const mat = new THREE.MeshLambertMaterial({ color: col, emissive: col, emissiveIntensity: isC ? 0.55 : 0.25 });
+      const mesh = new THREE.Mesh(geo, mat);
       mesh.position.set(x, y, z);
       group.add(mesh);
-      const gg = new THREE.SphereGeometry(r * 3.2, 12, 12);
-      const gm = new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.05 });
-      const glow = new THREE.Mesh(gg, gm);
-      glow.position.set(x, y, z);
-      group.add(glow);
+      if (isC) {
+        const hg = new THREE.SphereGeometry(r * 3.4, 12, 12);
+        const hm = new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.06 });
+        const halo = new THREE.Mesh(hg, hm);
+        halo.position.set(x, y, z);
+        group.add(halo);
+      }
       return mesh;
     });
 
-    EDGES.forEach(([ai, bi]) => {
-      const a = new THREE.Vector3(...ND[ai].slice(0,3));
-      const b = new THREE.Vector3(...ND[bi].slice(0,3));
-      const geo = new THREE.BufferGeometry().setFromPoints([a, b]);
-      const mat = new THREE.LineBasicMaterial({ color: 0x1e4060, transparent: true, opacity: 0.6 });
-      group.add(new THREE.Line(geo, mat));
+    // Sigil gets two orbiting torus rings — signals its role as the CA
+    const mkRing = (radius, tube, opacity, rotX) => {
+      const geo = new THREE.TorusGeometry(radius, tube, 8, 90);
+      const mat = new THREE.MeshBasicMaterial({ color: 0x3dd68c, transparent: true, opacity });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.rotation.x = rotX;
+      group.add(mesh);
+      return mesh;
+    };
+    const ring1 = mkRing(0.70, 0.017, 0.50, 1.1);
+    const ring2 = mkRing(1.02, 0.009, 0.18, 0.75);
+
+    const vecs = NODES.map(d => new THREE.Vector3(d[0], d[1], d[2]));
+
+    // Component-to-component edges with semantic colors
+    const COMP_EDGES = [
+      [0, 1, 0x3dd68c],  // Sigil  → Kprobe  (cert push)
+      [0, 2, 0x3dd68c],  // Sigil  → Conduit (cert)
+      [0, 3, 0x6fb6ff],  // Sigil  → Trace   (config events)
+      [1, 3, 0xf97e6f],  // Kprobe → Trace   (telemetry)
+      [2, 3, 0xb898ff],  // Conduit→ Trace   (metrics)
+    ];
+    // Pod → nearest enforcer edges
+    const POD_EDGES = [[4,1],[5,1],[6,1],[7,2],[8,2]];
+
+    COMP_EDGES.forEach(([a, b, col]) => {
+      group.add(new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints([vecs[a], vecs[b]]),
+        new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: 0.28 }),
+      ));
+    });
+    POD_EDGES.forEach(([p, c]) => {
+      group.add(new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints([vecs[p], vecs[c]]),
+        new THREE.LineBasicMaterial({ color: 0x1a3348, transparent: true, opacity: 0.35 }),
+      ));
     });
 
-    const pGeo = new THREE.SphereGeometry(0.045, 8, 8);
-    const pulses = EDGES.map(([ai, bi], idx) => {
-      const col = idx < 4 ? 0x3dd68c : 0x6fb6ff;
-      const pMat = new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.9 });
-      const mesh = new THREE.Mesh(pGeo, pMat);
+    // Animated pulse particles traveling along each component edge
+    const pGeo = new THREE.SphereGeometry(0.042, 8, 8);
+    const pulses = COMP_EDGES.map(([a, b, col], i) => {
+      const mat = new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0 });
+      const mesh = new THREE.Mesh(pGeo, mat);
       group.add(mesh);
-      return { mesh, from: ND[ai].slice(0,3), to: ND[bi].slice(0,3), t: idx / EDGES.length, speed: 0.005 + Math.random() * 0.003 };
+      return { mesh, from: vecs[a], to: vecs[b], t: i / COMP_EDGES.length, speed: 0.007 + Math.random() * 0.004 };
     });
 
     let mouseX = 0, mouseY = 0;
-    const onPtr = (e) => {
-      const r = canvas.getBoundingClientRect();
-      mouseX = (e.clientX - r.left) / r.width - 0.5;
-      mouseY = (e.clientY - r.top) / r.height - 0.5;
+    const onPtr = e => {
+      const rc = canvas.getBoundingClientRect();
+      mouseX = (e.clientX - rc.left) / rc.width - 0.5;
+      mouseY = (e.clientY - rc.top) / rc.height - 0.5;
     };
     window.addEventListener("pointermove", onPtr);
 
@@ -93,31 +147,29 @@ function MeshCanvas() {
     const animate = () => {
       animId = requestAnimationFrame(animate);
       const t = clk.getElapsedTime();
-      autoY += 0.0025;
-      smX += (-mouseY * 0.45 - smX) * 0.055;
-      smY += (mouseX * 0.35 - smY) * 0.055;
+      autoY += 0.0022;
+      smX += (-mouseY * 0.35 - smX) * 0.055;
+      smY += (mouseX * 0.28 - smY) * 0.055;
       group.rotation.y = autoY + smY;
       group.rotation.x = smX;
-
-      pulses.forEach((p) => {
+      starField.rotation.y = autoY * 0.15;
+      ring1.rotation.z += 0.005;
+      ring2.rotation.z -= 0.003;
+      pulses.forEach(p => {
         p.t = (p.t + p.speed) % 1;
-        const from = new THREE.Vector3(...p.from);
-        const to   = new THREE.Vector3(...p.to);
-        p.mesh.position.lerpVectors(from, to, p.t);
-        p.mesh.material.opacity = Math.sin(p.t * Math.PI) * 0.85;
+        p.mesh.position.lerpVectors(p.from, p.to, p.t);
+        p.mesh.material.opacity = Math.sin(p.t * Math.PI) * 0.9;
       });
-
-      nodeMeshes.forEach((m, i) => {
-        m.scale.setScalar(1 + Math.sin(t * 1.3 + i * 0.85) * 0.06);
+      meshes.forEach((m, i) => {
+        if (i < 4) m.scale.setScalar(1 + Math.sin(t * 1.1 + i * 1.2) * 0.045);
       });
-
+      sigilLight.intensity = 1.8 + Math.sin(t * 0.9) * 0.5;
       renderer.render(scene, camera);
     };
     animate();
 
     const ro = new ResizeObserver(() => {
-      const nW = canvas.clientWidth;
-      const nH = canvas.clientHeight;
+      const nW = canvas.clientWidth, nH = canvas.clientHeight;
       if (!nW || !nH) return;
       camera.aspect = nW / nH;
       camera.updateProjectionMatrix();
@@ -129,7 +181,129 @@ function MeshCanvas() {
       cancelAnimationFrame(animId);
       window.removeEventListener("pointermove", onPtr);
       ro.disconnect();
-      group.traverse((o) => {
+      group.traverse(o => {
+        if (o.geometry) o.geometry.dispose();
+        if (o.material) o.material.dispose();
+      });
+      renderer.dispose();
+      starGeo.dispose();
+    };
+  }, []);
+
+  return <canvas ref={ref} className="mesh-canvas" />;
+}
+
+// ─── Component 3D Icon Canvas ─────────────────────────────────────────────────
+// Renders a unique 3D shape per MeshLite component. Mounted once; active shape
+// is toggled via a ref so no WebGL context is recreated on tab switches.
+function CompCanvas3D({ compName }) {
+  const ref = useRef(null);
+  const nameRef = useRef(compName);
+  useEffect(() => { nameRef.current = compName; }, [compName]);
+
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    let animId;
+    const W = canvas.clientWidth || 100;
+    const H = canvas.clientHeight || 100;
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(38, W / H, 0.1, 50);
+    camera.position.set(0, 0, 4.5);
+    const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+    renderer.setSize(W, H);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setClearColor(0x000000, 0);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+    const ptLight = new THREE.PointLight(0xffffff, 2.8, 16);
+    ptLight.position.set(3, 3, 4);
+    scene.add(ptLight);
+
+    const group = new THREE.Group();
+    scene.add(group);
+
+    const ACCENT = { Sigil: 0x6fb6ff, Kprobe: 0xf97e6f, Conduit: 0xb898ff, Trace: 0x4ade9e };
+    const solidMat = col => new THREE.MeshLambertMaterial({ color: col, emissive: col, emissiveIntensity: 0.38, transparent: true, opacity: 0.84 });
+    const wireMat  = col => new THREE.MeshBasicMaterial({ color: col, wireframe: true, transparent: true, opacity: 0.38 });
+
+    const mkGroup = name => {
+      const g = new THREE.Group();
+      const col = ACCENT[name];
+      if (name === "Sigil") {
+        // Octahedron + wireframe  — certificate authority seal
+        g.add(new THREE.Mesh(new THREE.OctahedronGeometry(1.15, 0), solidMat(col)));
+        g.add(new THREE.Mesh(new THREE.OctahedronGeometry(1.17, 0), wireMat(col)));
+      } else if (name === "Kprobe") {
+        // Torus + inner ring — eBPF kernel hook
+        g.add(new THREE.Mesh(new THREE.TorusGeometry(1.05, 0.22, 14, 52), solidMat(col)));
+        g.add(new THREE.Mesh(new THREE.TorusGeometry(0.58, 0.07, 8, 36),
+          new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.35 })));
+      } else if (name === "Conduit") {
+        // Two interlocked toruses — mTLS tunnel
+        const t1 = new THREE.Mesh(new THREE.TorusGeometry(0.95, 0.16, 12, 44), solidMat(col));
+        const t2 = new THREE.Mesh(new THREE.TorusGeometry(0.95, 0.16, 12, 44),
+          new THREE.MeshLambertMaterial({ color: col, emissive: col, emissiveIntensity: 0.32, transparent: true, opacity: 0.70 }));
+        t2.rotation.x = Math.PI / 2;
+        g.add(t1); g.add(t2);
+      } else if (name === "Trace") {
+        // Icosahedron + wireframe — observation graph
+        g.add(new THREE.Mesh(new THREE.IcosahedronGeometry(1.15, 1), solidMat(col)));
+        g.add(new THREE.Mesh(new THREE.IcosahedronGeometry(1.17, 1), wireMat(col)));
+      }
+      return g;
+    };
+
+    const NAMES = ["Sigil", "Kprobe", "Conduit", "Trace"];
+    const shapeGroups = {};
+    NAMES.forEach(n => {
+      const sg = mkGroup(n);
+      sg.visible = n === nameRef.current;
+      group.add(sg);
+      shapeGroups[n] = sg;
+    });
+
+    let mouseX = 0, mouseY = 0;
+    const onPtr = e => {
+      const rc = canvas.getBoundingClientRect();
+      mouseX = (e.clientX - rc.left) / rc.width - 0.5;
+      mouseY = (e.clientY - rc.top) / rc.height - 0.5;
+    };
+    window.addEventListener("pointermove", onPtr);
+
+    let smX = 0, smY = 0;
+    const clk = new THREE.Clock();
+    const animate = () => {
+      animId = requestAnimationFrame(animate);
+      const t = clk.getElapsedTime();
+      const active = nameRef.current;
+      NAMES.forEach(n => { shapeGroups[n].visible = n === active; });
+      smX += (-mouseY * 0.45 - smX) * 0.08;
+      smY += (mouseX * 0.45 - smY) * 0.08;
+      group.rotation.y = t * 0.55 + smY;
+      group.rotation.x = 0.28 + smX;
+      if (active === "Kprobe") shapeGroups.Kprobe.children[1].rotation.z -= 0.04;
+      if (active === "Conduit") {
+        shapeGroups.Conduit.children[0].rotation.z += 0.02;
+        shapeGroups.Conduit.children[1].rotation.y += 0.018;
+      }
+      renderer.render(scene, camera);
+    };
+    animate();
+
+    const ro = new ResizeObserver(() => {
+      const nW = canvas.clientWidth, nH = canvas.clientHeight;
+      if (!nW || !nH) return;
+      camera.aspect = nW / nH;
+      camera.updateProjectionMatrix();
+      renderer.setSize(nW, nH);
+    });
+    ro.observe(canvas);
+
+    return () => {
+      cancelAnimationFrame(animId);
+      window.removeEventListener("pointermove", onPtr);
+      ro.disconnect();
+      group.traverse(o => {
         if (o.geometry) o.geometry.dispose();
         if (o.material) o.material.dispose();
       });
@@ -137,7 +311,7 @@ function MeshCanvas() {
     };
   }, []);
 
-  return <canvas ref={ref} className="mesh-canvas" />;
+  return <canvas ref={ref} className="comp-canvas-3d" />;
 }
 
 // ─── Topbar ───────────────────────────────────────────────────────────────────
@@ -198,11 +372,11 @@ function Hero({ onDocsClick }) {
           </div>
         </div>
         <div className="hero-canvas-wrap" aria-hidden="true">
-          <MeshCanvas />
-          <div className="node-label" style={{ top: "28%", left: "47%" }}>Sigil</div>
-          <div className="node-label" style={{ top: "41%", left: "10%" }}>Kprobe</div>
-          <div className="node-label" style={{ top: "60%", left: "68%" }}>Conduit</div>
-          <div className="node-label" style={{ top: "16%", left: "76%" }}>Trace</div>
+          <TopologyCanvas />
+          <div className="canvas-status">
+            <span className="cs-dot" />
+            <span className="cs-text">4 components · 5 service edges · eBPF enforced</span>
+          </div>
         </div>
       </div>
     </section>
@@ -329,7 +503,9 @@ function ComponentsExplorer() {
           </div>
           <div className="comp-panel" style={{ "--ca": comp.accent }}>
             <div className="panel-top">
-              <span className="panel-icon">{comp.icon}</span>
+              <div className="panel-canvas-wrap">
+                <CompCanvas3D compName={active} />
+              </div>
               <div>
                 <span className="panel-tag" style={{ color: comp.accent }}>{comp.tag}</span>
                 <h3 className="panel-name">{comp.name}</h3>
