@@ -16,3 +16,9 @@ Next steps:
 
 4. Verify the operator flow:
    meshctl --sigil-url http://127.0.0.1:8080 --trace-url http://127.0.0.1:3000 status
+
+{{- if and .Values.demo.enabled .Values.demo.ui.enabled }}
+5. Access the Helm-managed validator demo locally:
+   kubectl -n {{ .Values.demo.namespace }} port-forward svc/{{ .Values.demo.ui.serviceName }} 8088:{{ .Values.demo.ui.servicePort }}
+   Then open http://127.0.0.1:8088
+{{- end }}

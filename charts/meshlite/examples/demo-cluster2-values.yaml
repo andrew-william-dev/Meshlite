@@ -1,0 +1,27 @@
+# Deploy only the Helm-managed validator demo backend on top of an existing MeshLite runtime in cluster 2.
+sigil:
+  enabled: false
+kprobe:
+  enabled: false
+trace:
+  enabled: false
+conduitEgress:
+  enabled: false
+conduitIngress:
+  enabled: false
+
+demo:
+  enabled: true
+  namespace: meshlite-test
+  createNamespace: false
+  clusterName: cluster-2
+  image:
+    repository: meshlite/service-validator
+    tag: demo-fix
+    pullPolicy: IfNotPresent
+  ui:
+    enabled: false
+  same:
+    enabled: false
+  cross:
+    enabled: true
