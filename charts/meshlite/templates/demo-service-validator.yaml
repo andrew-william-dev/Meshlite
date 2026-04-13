@@ -1,0 +1,231 @@
+{{- if .Values.demo.enabled }}
+{{- $demo := .Values.demo -}}
+{{- $ns := $demo.namespace | default "meshlite-test" -}}
+{{- $imageRepo := $demo.image.repository -}}
+{{- $imageTag := $demo.image.tag | default "demo-fix" -}}
+{{- $sameTargetURL := $demo.ui.sameTargetUrl -}}
+{{- if and (eq $sameTargetURL "") $demo.same.enabled -}}
+{{- $sameTargetURL = printf "http://%s.%s.svc.cluster.local:%v/api/ping" $demo.same.serviceName $ns (int $demo.same.servicePort) -}}
+{{- end -}}
+{{- $crossTargetURL := $demo.ui.crossTargetUrl -}}
+{{- if $demo.createNamespace }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ $ns }}
+---
+{{- end }}
+{{- if $demo.ui.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $demo.ui.serviceName }}
+  namespace: {{ $ns }}
+  labels:
+    app: {{ $demo.ui.serviceName }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ $demo.ui.serviceName }}
+  template:
+    metadata:
+      labels:
+        app: {{ $demo.ui.serviceName }}
+        meshlite.io/service: {{ $demo.ui.serviceName }}
+    spec:
+      {{- with $demo.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if $demo.same.enabled }}
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - {{ $demo.same.serviceName }}
+              topologyKey: kubernetes.io/hostname
+      {{- end }}
+      containers:
+        - name: {{ $demo.ui.serviceName }}
+          image: "{{ $imageRepo }}:{{ $imageTag }}"
+          imagePullPolicy: {{ $demo.image.pullPolicy }}
+          env:
+            - name: SERVICE_NAME
+              value: {{ $demo.ui.serviceName | quote }}
+            - name: CLUSTER_NAME
+              value: {{ $demo.clusterName | quote }}
+            - name: SAME_TARGET_NAME
+              value: {{ $demo.ui.sameTargetName | quote }}
+            - name: SAME_TARGET_URL
+              value: {{ $sameTargetURL | quote }}
+            - name: CROSS_TARGET_NAME
+              value: {{ $demo.ui.crossTargetName | quote }}
+            - name: CROSS_TARGET_URL
+              value: {{ $crossTargetURL | quote }}
+            - name: CROSS_TARGET_HOST
+              value: {{ $demo.ui.crossTargetHost | quote }}
+          ports:
+            - containerPort: {{ $demo.ui.servicePort }}
+              name: http
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          resources:
+            {{- toYaml $demo.ui.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $demo.ui.serviceName }}
+  namespace: {{ $ns }}
+spec:
+  selector:
+    app: {{ $demo.ui.serviceName }}
+  ports:
+    - name: http
+      port: {{ $demo.ui.servicePort }}
+      targetPort: http
+---
+{{- end }}
+{{- if $demo.same.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $demo.same.serviceName }}
+  namespace: {{ $ns }}
+  labels:
+    app: {{ $demo.same.serviceName }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ $demo.same.serviceName }}
+  template:
+    metadata:
+      labels:
+        app: {{ $demo.same.serviceName }}
+        meshlite.io/service: {{ $demo.same.serviceName }}
+    spec:
+      {{- with $demo.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if $demo.ui.enabled }}
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - {{ $demo.ui.serviceName }}
+              topologyKey: kubernetes.io/hostname
+      {{- end }}
+      containers:
+        - name: {{ $demo.same.serviceName }}
+          image: "{{ $imageRepo }}:{{ $imageTag }}"
+          imagePullPolicy: {{ $demo.image.pullPolicy }}
+          env:
+            - name: SERVICE_NAME
+              value: {{ $demo.same.serviceName | quote }}
+            - name: CLUSTER_NAME
+              value: {{ $demo.clusterName | quote }}
+          ports:
+            - containerPort: {{ $demo.same.servicePort }}
+              name: http
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          resources:
+            {{- toYaml $demo.same.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $demo.same.serviceName }}
+  namespace: {{ $ns }}
+spec:
+  selector:
+    app: {{ $demo.same.serviceName }}
+  ports:
+    - name: http
+      port: {{ $demo.same.servicePort }}
+      targetPort: http
+---
+{{- end }}
+{{- if $demo.cross.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $demo.cross.serviceName }}
+  namespace: {{ $ns }}
+  labels:
+    app: {{ $demo.cross.serviceName }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ $demo.cross.serviceName }}
+  template:
+    metadata:
+      labels:
+        app: {{ $demo.cross.serviceName }}
+        meshlite.io/service: {{ $demo.cross.serviceName }}
+    spec:
+      {{- with $demo.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ $demo.cross.serviceName }}
+          image: "{{ $imageRepo }}:{{ $imageTag }}"
+          imagePullPolicy: {{ $demo.image.pullPolicy }}
+          env:
+            - name: SERVICE_NAME
+              value: {{ $demo.cross.serviceName | quote }}
+            - name: CLUSTER_NAME
+              value: {{ $demo.clusterName | quote }}
+          ports:
+            - containerPort: {{ $demo.cross.servicePort }}
+              name: http
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          resources:
+            {{- toYaml $demo.cross.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $demo.cross.serviceName }}
+  namespace: {{ $ns }}
+spec:
+  selector:
+    app: {{ $demo.cross.serviceName }}
+  ports:
+    - name: http
+      port: {{ $demo.cross.servicePort }}
+      targetPort: http
+{{- end }}
+{{- end }}

@@ -73,3 +73,53 @@ conduitIngress:
     addr: http://trace.meshlite-system.svc.cluster.local:3000
   peer:
     addr: ""
+
+# Optional demo workloads used for the live validator walkthrough.
+demo:
+  enabled: false
+  namespace: meshlite-test
+  createNamespace: true
+  image:
+    repository: meshlite/service-validator
+    tag: demo-fix
+    pullPolicy: IfNotPresent
+  imagePullSecrets: []
+  clusterName: cluster-1
+  ui:
+    enabled: false
+    serviceName: validator-ui
+    servicePort: 8080
+    sameTargetName: validator-same
+    sameTargetUrl: ""
+    crossTargetName: validator-cross
+    crossTargetUrl: ""
+    crossTargetHost: validator-cross
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 250m
+        memory: 128Mi
+  same:
+    enabled: false
+    serviceName: validator-same
+    servicePort: 8080
+    resources:
+      requests:
+        cpu: 50m
+        memory: 48Mi
+      limits:
+        cpu: 200m
+        memory: 96Mi
+  cross:
+    enabled: false
+    serviceName: validator-cross
+    servicePort: 8080
+    resources:
+      requests:
+        cpu: 50m
+        memory: 48Mi
+      limits:
+        cpu: 200m
+        memory: 96Mi

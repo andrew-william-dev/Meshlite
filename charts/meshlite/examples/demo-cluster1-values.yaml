@@ -1,0 +1,31 @@
+# Deploy only the Helm-managed validator demo on top of an existing MeshLite runtime in cluster 1.
+# In the current kind lab, override `demo.ui.sameTargetUrl` and `demo.ui.crossTargetUrl`
+# with the live ClusterIP values during `helm upgrade --install` for the most reliable demo path.
+sigil:
+  enabled: false
+kprobe:
+  enabled: false
+trace:
+  enabled: false
+conduitEgress:
+  enabled: false
+conduitIngress:
+  enabled: false
+
+demo:
+  enabled: true
+  namespace: meshlite-test
+  createNamespace: false
+  clusterName: cluster-1
+  image:
+    repository: meshlite/service-validator
+    tag: demo-fix
+    pullPolicy: IfNotPresent
+  ui:
+    enabled: true
+    crossTargetUrl: http://conduit-egress-conduit.meshlite-system.svc.cluster.local:9090/api/ping
+    crossTargetHost: validator-cross
+  same:
+    enabled: true
+  cross:
+    enabled: false
