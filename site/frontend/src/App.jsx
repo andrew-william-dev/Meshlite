@@ -1,4 +1,5 @@
-﻿import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
+import * as THREE from "three";
 
 const GITHUB_API = "https://api.github.com/repos/andrew-william-dev/Meshlite/releases/latest";
 
@@ -15,6 +16,130 @@ function useLatestRelease() {
   return state;
 }
 
+// ─── 3D Mesh Canvas ───────────────────────────────────────────────────────────
+function MeshCanvas() {
+  const ref = useRef(null);
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    let animId;
+    const W = canvas.clientWidth || 520;
+    const H = canvas.clientHeight || 480;
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(52, W / H, 0.1, 100);
+    camera.position.set(0, 0, 7);
+    const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+    renderer.setSize(W, H);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setClearColor(0x000000, 0);
+
+    // [x, y, z, hexColor, radius]
+    const ND = [
+      [0,    0,    0,    0x3dd68c, 0.22], // 0 Sigil
+      [-1.8, 0.6,  0.5,  0x6fb6ff, 0.14], // 1 Kprobe-A
+      [1.5,  -0.8, 0.3,  0x6fb6ff, 0.14], // 2 Kprobe-B
+      [-0.4, 1.9,  -0.3, 0xb898ff, 0.14], // 3 Conduit
+      [1.9,  1.3,  -0.4, 0x4ade9e, 0.13], // 4 Trace
+      [-1.5, -1.6, 0.2,  0x3a6070, 0.09], // 5 svc-a
+      [0.7,  -1.9, 0.5,  0x3a6070, 0.09], // 6 svc-b
+      [-0.2, 0.8,  1.9,  0x3a6070, 0.09], // 7 svc-c
+    ];
+    const EDGES = [[0,1],[0,2],[0,3],[0,4],[1,5],[2,6],[1,7],[4,2],[3,0]];
+
+    const group = new THREE.Group();
+    scene.add(group);
+
+    const nodeMeshes = ND.map(([x,y,z,col,r]) => {
+      const g = new THREE.SphereGeometry(r, 22, 22);
+      const m = new THREE.MeshBasicMaterial({ color: col });
+      const mesh = new THREE.Mesh(g, m);
+      mesh.position.set(x, y, z);
+      group.add(mesh);
+      const gg = new THREE.SphereGeometry(r * 3.2, 12, 12);
+      const gm = new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.05 });
+      const glow = new THREE.Mesh(gg, gm);
+      glow.position.set(x, y, z);
+      group.add(glow);
+      return mesh;
+    });
+
+    EDGES.forEach(([ai, bi]) => {
+      const a = new THREE.Vector3(...ND[ai].slice(0,3));
+      const b = new THREE.Vector3(...ND[bi].slice(0,3));
+      const geo = new THREE.BufferGeometry().setFromPoints([a, b]);
+      const mat = new THREE.LineBasicMaterial({ color: 0x1e4060, transparent: true, opacity: 0.6 });
+      group.add(new THREE.Line(geo, mat));
+    });
+
+    const pGeo = new THREE.SphereGeometry(0.045, 8, 8);
+    const pulses = EDGES.map(([ai, bi], idx) => {
+      const col = idx < 4 ? 0x3dd68c : 0x6fb6ff;
+      const pMat = new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.9 });
+      const mesh = new THREE.Mesh(pGeo, pMat);
+      group.add(mesh);
+      return { mesh, from: ND[ai].slice(0,3), to: ND[bi].slice(0,3), t: idx / EDGES.length, speed: 0.005 + Math.random() * 0.003 };
+    });
+
+    let mouseX = 0, mouseY = 0;
+    const onPtr = (e) => {
+      const r = canvas.getBoundingClientRect();
+      mouseX = (e.clientX - r.left) / r.width - 0.5;
+      mouseY = (e.clientY - r.top) / r.height - 0.5;
+    };
+    window.addEventListener("pointermove", onPtr);
+
+    let autoY = 0, smX = 0, smY = 0;
+    const clk = new THREE.Clock();
+    const animate = () => {
+      animId = requestAnimationFrame(animate);
+      const t = clk.getElapsedTime();
+      autoY += 0.0025;
+      smX += (-mouseY * 0.45 - smX) * 0.055;
+      smY += (mouseX * 0.35 - smY) * 0.055;
+      group.rotation.y = autoY + smY;
+      group.rotation.x = smX;
+
+      pulses.forEach((p) => {
+        p.t = (p.t + p.speed) % 1;
+        const from = new THREE.Vector3(...p.from);
+        const to   = new THREE.Vector3(...p.to);
+        p.mesh.position.lerpVectors(from, to, p.t);
+        p.mesh.material.opacity = Math.sin(p.t * Math.PI) * 0.85;
+      });
+
+      nodeMeshes.forEach((m, i) => {
+        m.scale.setScalar(1 + Math.sin(t * 1.3 + i * 0.85) * 0.06);
+      });
+
+      renderer.render(scene, camera);
+    };
+    animate();
+
+    const ro = new ResizeObserver(() => {
+      const nW = canvas.clientWidth;
+      const nH = canvas.clientHeight;
+      if (!nW || !nH) return;
+      camera.aspect = nW / nH;
+      camera.updateProjectionMatrix();
+      renderer.setSize(nW, nH);
+    });
+    ro.observe(canvas);
+
+    return () => {
+      cancelAnimationFrame(animId);
+      window.removeEventListener("pointermove", onPtr);
+      ro.disconnect();
+      group.traverse((o) => {
+        if (o.geometry) o.geometry.dispose();
+        if (o.material) o.material.dispose();
+      });
+      renderer.dispose();
+    };
+  }, []);
+
+  return <canvas ref={ref} className="mesh-canvas" />;
+}
+
 // ─── Topbar ───────────────────────────────────────────────────────────────────
 function Topbar({ page, setPage }) {
   return (
@@ -28,7 +153,11 @@ function Topbar({ page, setPage }) {
           <button className={`nav-btn${page === "docs" ? " active" : ""}`} onClick={() => setPage("docs")}>Docs</button>
           <a className="nav-btn" href="https://github.com/andrew-william-dev/Meshlite" target="_blank" rel="noreferrer">GitHub</a>
         </nav>
-        <button className="topbar-cta" onClick={() => setPage("docs")}>Get started →</button>
+        {page === "home" ? (
+          <button className="topbar-cta" onClick={() => setPage("docs")}>Get started →</button>
+        ) : (
+          <button className="topbar-cta topbar-back" onClick={() => setPage("home")}>← Product</button>
+        )}
       </div>
     </header>
   );
@@ -41,47 +170,57 @@ function Hero({ onDocsClick }) {
       <div className="hero-glow g1" />
       <div className="hero-glow g2" />
       <div className="hero-grid-bg" />
-      <div className="container hero-inner">
-        <div className="hero-eyebrow">Zero Trust · eBPF · Kubernetes</div>
-        <h1>
-          Service mesh security.<br />
-          <span className="em-teal">Without the complexity.</span>
-        </h1>
-        <p className="hero-sub">
-          mTLS identity, policy enforcement, cross-cluster traffic control, and real-time
-          observability — without sidecars, heavyweight operators, or a 20-pod control plane.
-        </p>
-        <div className="hero-btns">
-          <button className="btn-primary" onClick={onDocsClick}>Get started</button>
-          <a className="btn-outline" href="https://github.com/andrew-william-dev/Meshlite" target="_blank" rel="noreferrer">
-            View on GitHub
-          </a>
+      <div className="container hero-split">
+        <div className="hero-text">
+          <div className="hero-eyebrow">Zero Trust · eBPF · Kubernetes</div>
+          <h1>
+            Service mesh security.<br />
+            <span className="em-teal">Without the complexity.</span>
+          </h1>
+          <p className="hero-sub">
+            mTLS identity, policy enforcement, cross-cluster traffic control, and real-time
+            observability — without sidecars, heavyweight operators, or a 20-pod control plane.
+          </p>
+          <div className="hero-btns">
+            <button className="btn-primary" onClick={onDocsClick}>Get started</button>
+            <a className="btn-outline" href="https://github.com/andrew-william-dev/Meshlite" target="_blank" rel="noreferrer">
+              View on GitHub
+            </a>
+          </div>
+          <div className="stat-strip">
+            <div className="stat"><span className="stat-num">0</span><span className="stat-lbl">sidecars</span></div>
+            <div className="stat-div" />
+            <div className="stat"><span className="stat-num">~4</span><span className="stat-lbl">ctrl plane pods</span></div>
+            <div className="stat-div" />
+            <div className="stat"><span className="stat-num">+7ms</span><span className="stat-lbl">p99 overhead</span></div>
+            <div className="stat-div" />
+            <div className="stat"><span className="stat-num">1</span><span className="stat-lbl">Helm chart</span></div>
+          </div>
         </div>
-        <div className="stat-strip">
-          <div className="stat"><span className="stat-num">0</span><span className="stat-lbl">sidecars required</span></div>
-          <div className="stat-div" />
-          <div className="stat"><span className="stat-num">~4</span><span className="stat-lbl">control plane pods</span></div>
-          <div className="stat-div" />
-          <div className="stat"><span className="stat-num">+7ms</span><span className="stat-lbl">p99 overhead measured</span></div>
-          <div className="stat-div" />
-          <div className="stat"><span className="stat-num">1</span><span className="stat-lbl">Helm chart to install</span></div>
+        <div className="hero-canvas-wrap" aria-hidden="true">
+          <MeshCanvas />
+          <div className="node-label" style={{ top: "28%", left: "47%" }}>Sigil</div>
+          <div className="node-label" style={{ top: "41%", left: "10%" }}>Kprobe</div>
+          <div className="node-label" style={{ top: "60%", left: "68%" }}>Conduit</div>
+          <div className="node-label" style={{ top: "16%", left: "76%" }}>Trace</div>
         </div>
       </div>
     </section>
   );
 }
 
-// ─── Why section ──────────────────────────────────────────────────────────────
-function WhySection() {
-  const rows = [
-    ["Sidecar per pod",    "No — eBPF runs at the kernel layer",        "Yes — Envoy proxy, 60–100 MB per pod"],
-    ["Installation",       "1 Helm chart, one namespace",                "CRD bundle, Operator, sidecar injector"],
-    ["Control plane size", "~4 pods total",                              "~10–20 pods + sidecars on every workload"],
-    ["Cross-cluster",      "Two Helm stanzas, shared root CA",           "Multi-cluster config + CA federation"],
-    ["Observability",      "Trace built-in — no extra stack",            "Kiali + Prometheus + Grafana required"],
-    ["CLI",                "meshctl: apply, status, verify, logs",        "istioctl with dozens of subcommands"],
-    ["Memory overhead",    "Near zero — eBPF per node, not per pod",     "60–100 MB Envoy sidecar per workload"],
-  ];
+// ─── Comparison section ───────────────────────────────────────────────────────
+const CMP_ROWS = [
+  { feature: "Sidecars",        ml: { metric: "0",       label: "per pod",      sub: "eBPF at kernel layer — no proxy processes" },     istio: { metric: "1+",      label: "per pod",      sub: "Envoy proxy, 60–100 MB each" } },
+  { feature: "Control plane",   ml: { metric: "~4",      label: "pods total",   sub: "Sigil + Kprobe DaemonSet + Conduit + Trace" },     istio: { metric: "10–20",   label: "pods",         sub: "Plus sidecars injected on every workload" } },
+  { feature: "Installation",    ml: { metric: "1",       label: "Helm chart",   sub: "One namespace. No CRD bundle. No operator." },      istio: { metric: "3+",      label: "steps",        sub: "CRD bundle, Operator, sidecar injector" } },
+  { feature: "Observability",   ml: { metric: "0",       label: "extra tools",  sub: "Trace ships built-in with the platform" },           istio: { metric: "3",       label: "extra tools",  sub: "Kiali + Prometheus + Grafana all required" } },
+  { feature: "Cross-cluster",   ml: { metric: "2",       label: "YAML stanzas", sub: "One for Egress cluster, one for Ingress" },           istio: { metric: "complex", label: "federation",   sub: "Multi-cluster mesh config + CA federation" } },
+  { feature: "Memory overhead", ml: { metric: "≈0",      label: "per workload", sub: "eBPF: one kernel program per node" },                 istio: { metric: "60MB+",   label: "per pod",      sub: "Envoy sidecar on every workload" } },
+];
+
+function ComparisonSection() {
+  const [hov, setHov] = useState(null);
   return (
     <section className="page-section">
       <div className="container">
@@ -89,66 +228,77 @@ function WhySection() {
           <span className="eyebrow">Why MeshLite</span>
           <h2>A real alternative to Istio</h2>
           <p className="sec-desc">
-            Istio was built for massive multi-tenant platforms. Most teams spend more time
-            operating it than benefiting from it. MeshLite gives you zero-trust networking
-            without the operational overhead.
+            Istio is powerful but built for massive platforms. MeshLite delivers the same
+            zero-trust guarantees at a fraction of the operational complexity.
           </p>
         </div>
-        <div className="table-shell">
-          <table className="cmp-table">
-            <thead>
-              <tr>
-                <th />
-                <th className="th-ml">MeshLite</th>
-                <th className="th-is">Istio</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(([f, ml, is]) => (
-                <tr key={f}>
-                  <td className="td-feat">{f}</td>
-                  <td className="td-ml"><span className="chk">✓</span>{ml}</td>
-                  <td className="td-is">{is}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="cmp-arena">
+          <div className="cmp-header-row">
+            <div className="cmp-feat-col" />
+            <div className="cmp-col-hd ml-hd"><span className="brand-dot" />MeshLite</div>
+            <div className="cmp-col-hd is-hd">Istio</div>
+          </div>
+          {CMP_ROWS.map((row, i) => (
+            <div
+              key={row.feature}
+              className={`cmp-row${hov === i ? " cmp-row-on" : ""}`}
+              onMouseEnter={() => setHov(i)}
+              onMouseLeave={() => setHov(null)}
+            >
+              <div className="cmp-feat">{row.feature}</div>
+              <div className="cmp-cell ml-cell">
+                <div className="cmp-metric-wrap">
+                  <span className="cmp-num ml-num">{row.ml.metric}</span>
+                  <span className="cmp-unit">{row.ml.label}</span>
+                </div>
+                <span className="cmp-sub">{row.ml.sub}</span>
+              </div>
+              <div className="cmp-cell is-cell">
+                <div className="cmp-metric-wrap">
+                  <span className="cmp-num is-num">{row.istio.metric}</span>
+                  <span className="cmp-unit">{row.istio.label}</span>
+                </div>
+                <span className="cmp-sub">{row.istio.sub}</span>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </section>
   );
 }
 
-// ─── Components section ───────────────────────────────────────────────────────
+// ─── Components explorer ──────────────────────────────────────────────────────
 const COMPS = [
   {
-    name: "Sigil", tag: "Control Plane", accent: "#6fb6ff",
+    name: "Sigil", tag: "Control Plane", accent: "#6fb6ff", icon: "⬡",
     summary: "The single certificate authority and policy engine for the entire mesh.",
     detail: "Sigil issues ECDSA P-256 certificates to every registered service, owns the policy store, and pushes updates to Kprobe agents in real time. All certificates across all clusters derive from one root — simplifying cross-cluster identity without a separate federation setup.",
     bullets: ["ECDSA P-256 cert issuance", "Push-based policy distribution", "Online rotation without restarts", "Single root CA for all clusters"],
   },
   {
-    name: "Kprobe", tag: "eBPF Enforcer", accent: "#f97e6f",
+    name: "Kprobe", tag: "eBPF Enforcer", accent: "#f97e6f", icon: "◈",
     summary: "Kubernetes traffic enforcement at the kernel layer. No sidecar per pod.",
     detail: "A Rust eBPF program attached to the tc hook on each node. It intercepts pod-to-pod traffic, resolves identities, and decides ALLOW or DENY before the packet reaches the application — at kernel speed, with no proxy process running beside your workloads.",
     bullets: ["No sidecar, no extra process per pod", "tc layer interception via Rust + Aya", "Sub-millisecond policy decisions", "Telemetry with no overhead"],
   },
   {
-    name: "Conduit", tag: "Cross-Cluster Gateway", accent: "#c4a6ff",
+    name: "Conduit", tag: "Cross-Cluster Gateway", accent: "#c4a6ff", icon: "⇄",
     summary: "mTLS enforcement at the cluster boundary where eBPF cannot reach.",
-    detail: "Egress wraps outbound traffic in mTLS with Sigil-issued identity. Ingress verifies that identity before forwarding to internal workloads. Configure a full cross-cluster boundary with just two YAML stanzas.",
+    detail: "Egress wraps outbound traffic in mTLS with Sigil-issued identity. Ingress verifies that identity before forwarding to internal workloads. Configure a full cross-cluster boundary with just two YAML stanzas in your Helm values.",
     bullets: ["Mutual TLS at the cluster edge", "Sigil-backed identity on both sides", "Single YAML stanza per cluster role", "Supports any multi-cluster topology"],
   },
   {
-    name: "Trace", tag: "Observability", accent: "#4ade9e",
+    name: "Trace", tag: "Observability", accent: "#4ade9e", icon: "◉",
     summary: "Real-time service topology, event feed, and latency — in one container.",
-    detail: "Accumulates telemetry from Kprobe and Conduit. Renders a live service graph, per-edge latency, ALLOW / DENY event feed, and cross-cluster edge classification. Single container. No Prometheus scraping. No Kiali CRDs. No Grafana dashboards to import.",
+    detail: "Accumulates telemetry from Kprobe and Conduit. Renders a live service graph, per-edge latency, ALLOW / DENY event feed, and cross-cluster edge classification. Single container. No Prometheus. No Kiali CRDs. No Grafana dashboards to import.",
     bullets: ["Live service topology map", "Policy event feed with timestamps", "p50 / p99 per edge", "Cross-cluster edges tagged distinctly"],
   },
 ];
 
-function ComponentsSection() {
-  const [open, setOpen] = useState(null);
+function ComponentsExplorer() {
+  const [active, setActive] = useState("Sigil");
+  const comp = COMPS.find((c) => c.name === active);
   return (
     <section className="page-section section-alt">
       <div className="container">
@@ -156,35 +306,41 @@ function ComponentsSection() {
           <span className="eyebrow">Architecture</span>
           <h2>Four components, one coherent platform</h2>
           <p className="sec-desc">
-            Each component has a single responsibility. Together they form a runtime security
-            layer that is completely transparent to application workloads.
+            Each has a single responsibility. Together they form a runtime security layer
+            completely transparent to application workloads.
           </p>
         </div>
-        <div className="comp-grid">
-          {COMPS.map((c) => (
-            <div
-              key={c.name}
-              className={`comp-card${open === c.name ? " open" : ""}`}
-              style={{ "--ca": c.accent }}
-            >
-              <button className="comp-header" onClick={() => setOpen(open === c.name ? null : c.name)}>
-                <div>
-                  <span className="comp-tag" style={{ color: c.accent }}>{c.tag}</span>
-                  <h3 className="comp-name">{c.name}</h3>
-                  <p className="comp-summary">{c.summary}</p>
+        <div className="comp-explorer">
+          <div className="comp-tabs">
+            {COMPS.map((c) => (
+              <button
+                key={c.name}
+                className={`comp-tab${active === c.name ? " active" : ""}`}
+                style={{ "--ca": c.accent }}
+                onClick={() => setActive(c.name)}
+              >
+                <span className="tab-icon">{c.icon}</span>
+                <div className="tab-info">
+                  <span className="tab-name">{c.name}</span>
+                  <span className="tab-sub">{c.tag}</span>
                 </div>
-                <span className="comp-toggle" aria-hidden="true">{open === c.name ? "−" : "+"}</span>
               </button>
-              {open === c.name && (
-                <div className="comp-body">
-                  <p>{c.detail}</p>
-                  <ul>
-                    {c.bullets.map((b) => <li key={b}>{b}</li>)}
-                  </ul>
-                </div>
-              )}
+            ))}
+          </div>
+          <div className="comp-panel" style={{ "--ca": comp.accent }}>
+            <div className="panel-top">
+              <span className="panel-icon">{comp.icon}</span>
+              <div>
+                <span className="panel-tag" style={{ color: comp.accent }}>{comp.tag}</span>
+                <h3 className="panel-name">{comp.name}</h3>
+              </div>
             </div>
-          ))}
+            <p className="panel-summary">{comp.summary}</p>
+            <p className="panel-detail">{comp.detail}</p>
+            <ul className="panel-bullets">
+              {comp.bullets.map((b) => <li key={b}>{b}</li>)}
+            </ul>
+          </div>
         </div>
       </div>
     </section>
@@ -306,8 +462,8 @@ function HomePage({ onDocsClick }) {
   return (
     <main className="home">
       <Hero onDocsClick={onDocsClick} />
-      <WhySection />
-      <ComponentsSection />
+      <ComparisonSection />
+      <ComponentsExplorer />
       <TraceSection />
       <GetStartedSection onDocsClick={onDocsClick} />
     </main>
@@ -818,13 +974,34 @@ function DocSidebar({ current, onChange }) {
 
 function DocsPage() {
   const [section, setSection] = useState("overview");
+  const [headings, setHeadings] = useState([]);
+  const contentRef = useRef(null);
   const Content = DOC_MAP[section] || DocOverview;
+
+  useEffect(() => {
+    if (!contentRef.current) return;
+    const els = contentRef.current.querySelectorAll("h2");
+    const items = Array.from(els).map((el, i) => {
+      if (!el.id) el.id = `doc-h-${i}`;
+      return { id: el.id, text: el.textContent };
+    });
+    setHeadings(items);
+  }, [section]);
+
   return (
     <div className="docs-layout">
       <DocSidebar current={section} onChange={setSection} />
-      <main className="docs-content">
+      <main className="docs-content" ref={contentRef}>
         <Content />
       </main>
+      {headings.length > 0 && (
+        <aside className="docs-toc">
+          <span className="toc-label">On this page</span>
+          {headings.map((h) => (
+            <a key={h.id} href={`#${h.id}`} className="toc-link">{h.text}</a>
+          ))}
+        </aside>
+      )}
     </div>
   );
 }
