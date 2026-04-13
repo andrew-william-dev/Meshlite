@@ -65,7 +65,7 @@ function LatestRelease() {
       </p>
       {meshctlAsset && (
         <a href={meshctlAsset.browser_download_url} target="_blank" rel="noreferrer">
-          Download first meshctl asset
+          Download meshctl binary
         </a>
       )}
     </div>
@@ -75,48 +75,68 @@ function LatestRelease() {
 function HomePage({ onDocsClick }) {
   return (
     <main>
-      <section className="hero">
+      <section className="hero hero-3d">
         <div className="hero-glow" />
         <div className="hero-grid" />
         <div className="hero-content">
-          <p className="hero-kicker">Runtime Security Mesh | Alpha</p>
-          <h1>Policy-first service connectivity without heavy platform tax.</h1>
-          <p className="hero-copy">
-            MeshLite combines identity, traffic policy, and observability into a compact control plane. You get cross-cluster
-            safety controls, TLS-backed service trust, and traceable decisions in one operator workflow.
-          </p>
-          <div className="hero-actions">
-            <button className="btn btn-primary" onClick={onDocsClick}>
-              Read docs
-            </button>
-            <a className="btn btn-ghost" href="https://github.com/andrew-william-dev/Meshlite" target="_blank" rel="noreferrer">
-              View GitHub
-            </a>
+          <div className="hero-copy-pane">
+            <p className="hero-kicker">Runtime Security Mesh | Alpha</p>
+            <h1>Security policy, identity, and observability in one lightweight mesh plane.</h1>
+            <p className="hero-copy">
+              MeshLite gives teams a focused runtime security stack: Sigil for policy and identity, Conduit for enforcement,
+              Trace for high-signal visibility, and meshctl for day-two operations.
+            </p>
           </div>
+
+          <div className="hero-scene" aria-hidden="true">
+            <div className="orbit orbit-a" />
+            <div className="orbit orbit-b" />
+            <div className="node node-sigil">Sigil</div>
+            <div className="node node-conduit">Conduit</div>
+            <div className="node node-trace">Trace</div>
+            <div className="beam beam-1" />
+            <div className="beam beam-2" />
+          </div>
+        </div>
+
+        <div className="hero-actions hero-actions-wide">
+          <button className="btn btn-primary" onClick={onDocsClick}>
+            Read docs
+          </button>
+          <a className="btn btn-ghost" href="https://github.com/andrew-william-dev/Meshlite" target="_blank" rel="noreferrer">
+            View GitHub
+          </a>
         </div>
       </section>
 
       <section className="value-grid" aria-label="MeshLite capabilities">
         <article>
           <h3>Sigil control plane</h3>
-          <p>Issue service identities, distribute policy, and keep mTLS intent centralized.</p>
+          <p className="hero-copy">
+            Issue service identities, distribute policy, and keep mTLS trust anchored to explicit runtime intent.
+          </p>
         </article>
         <article>
           <h3>Conduit enforcement</h3>
-          <p>Enforce runtime decisions at traffic boundaries with clear allow and deny telemetry.</p>
+          <p>Enforce allow and deny decisions on live service traffic with policy-first boundary checks.</p>
         </article>
         <article>
           <h3>Trace visibility</h3>
-          <p>Follow journeys from source to destination and inspect latency and verdict streams.</p>
+          <p>Follow request journeys with latency, verdict, and cross-cluster context for rapid verification.</p>
+        </article>
+        <article>
+          <h3>meshctl operations</h3>
+          <p>Install globally and run status, verify, apply, logs, and rotate commands from any terminal.</p>
         </article>
       </section>
 
-      <section className="how">
-        <h2>How MeshLite works</h2>
+      <section className="how platform-sequence">
+        <h2>Runtime sequence</h2>
         <ol>
-          <li>Define policy and identities in Sigil.</li>
-          <li>Conduit enforces traffic behavior at runtime.</li>
-          <li>Trace records outcomes so operators verify posture quickly.</li>
+          <li>Install the Helm chart and bring up Sigil, Conduit, and Trace.</li>
+          <li>Apply service policy and identity rules via meshctl.</li>
+          <li>Conduit enforces in-band and streams verdict metadata to Trace.</li>
+          <li>Operators validate behavior with meshctl verify and dashboard evidence.</li>
         </ol>
       </section>
 
@@ -132,48 +152,97 @@ function DocsPage() {
     <main className="docs-layout">
       <aside>
         <h3>Documentation</h3>
-        <a href="#quickstart">Quickstart</a>
-        <a href="#what-happens">What happens under the hood</a>
-        <a href="#meshctl">meshctl guide</a>
+        <a href="#overview">Overview</a>
+        <a href="#helm-install">Helm install</a>
+        <a href="#helm-structure">Helm values structure</a>
+        <a href="#meshctl-install">meshctl install</a>
+        <a href="#meshctl-commands">meshctl commands</a>
+        <a href="#runtime-flow">What happens at runtime</a>
       </aside>
 
       <article>
-        <section id="quickstart">
-          <h2>Quickstart</h2>
+        <section id="overview">
+          <h2>MeshLite quickstart overview</h2>
           <ol>
-            <li>Create dev clusters and install MeshLite components.</li>
-            <li>Apply sample workload manifests.</li>
-            <li>Use meshctl status and meshctl verify to inspect live policy decisions.</li>
-            <li>Open Trace to review request flow, latency, and verdicts.</li>
+            <li>Install MeshLite platform components using Helm.</li>
+            <li>Install meshctl globally from release artifacts.</li>
+            <li>Use meshctl to inspect policy and verify service paths.</li>
+            <li>Use Trace UI to inspect live request outcomes and latency.</li>
           </ol>
         </section>
 
-        <section id="what-happens">
-          <h2>What happens in runtime</h2>
+        <section id="helm-install">
+          <h2>Install MeshLite with Helm</h2>
+          <p>Start with the umbrella chart and enable the platform components you need for each environment.</p>
+          <pre className="codeblock">
+            <code>{`helm upgrade --install meshlite ./charts/meshlite \
+  --namespace meshlite-system \
+  --create-namespace`}</code>
+          </pre>
           <p>
-            Each request path is evaluated by policy from Sigil, then enforced by Conduit. Trace receives the decision and timing
-            metadata so you can audit the outcome and tune policy with confidence.
+            For split-cluster lab setups, use example values files and selective enables so cluster-1 and cluster-2 run the
+            expected control and data components.
           </p>
-          <ul>
-            <li>Identity: Service certificates establish caller and destination trust.</li>
-            <li>Policy: Allow and deny rules are resolved before traffic continuation.</li>
-            <li>Visibility: Request verdicts and latency become queryable operational signals.</li>
-          </ul>
         </section>
 
-        <section id="meshctl">
-          <h2>meshctl usage</h2>
-          <p>Install the CLI once from release artifacts, then use these core commands:</p>
-          <div className="codeblock">
-            <p>meshctl version</p>
-            <p>meshctl status --sigil-url http://127.0.0.1:8080 --trace-url http://127.0.0.1:3000</p>
-            <p>meshctl verify --from service-a --to service-b --sigil-url http://127.0.0.1:8080</p>
-            <p>meshctl logs --trace-url http://127.0.0.1:3000</p>
-          </div>
+        <section id="helm-structure">
+          <h2>Helm values structure</h2>
+          <p>Core sections in the chart values:</p>
+          <ul>
+            <li>sigil: control plane and CA settings</li>
+            <li>conduitEgress and conduitIngress: cross-cluster traffic enforcement surfaces</li>
+            <li>trace: runtime visibility and event APIs</li>
+            <li>kprobe: runtime capture and kernel-level event integration</li>
+            <li>demo: optional validator demo workloads for guided flows</li>
+          </ul>
           <p>
-            For policy updates, use meshctl apply with a policy file to push changes to Sigil, then re-run verify to validate new
-            behavior.
+            This structure lets operators keep one install surface while tailoring behavior per environment using values files.
           </p>
+        </section>
+
+        <section id="meshctl-install">
+          <h2>Install meshctl (no Go required)</h2>
+          <p>Install once, then run from any terminal:</p>
+          <pre className="codeblock">
+            <code>{`# Linux/macOS
+curl -sSfL <install-script-url> | sh
+
+# Windows PowerShell
+irm <install-script-url> | iex`}</code>
+          </pre>
+          <p>
+            meshctl is distributed as release binaries. Users do not need the MeshLite source repo or Go toolchain to operate the
+            platform.
+          </p>
+        </section>
+
+        <section id="meshctl-commands">
+          <h2>meshctl command guide</h2>
+          <pre className="codeblock">
+            <code>{`meshctl version
+meshctl status --sigil-url http://127.0.0.1:8080 --trace-url http://127.0.0.1:3000
+meshctl verify --from service-a --to service-b --sigil-url http://127.0.0.1:8080
+meshctl apply -f policy.yaml --sigil-url http://127.0.0.1:8080
+meshctl logs --trace-url http://127.0.0.1:3000`}</code>
+          </pre>
+          <p>
+            Typical flow: run status to check health, apply policy updates, run verify for preflight decisions, then inspect logs
+            and Trace for runtime outcomes.
+          </p>
+        </section>
+
+        <section id="runtime-flow">
+          <h2>What happens at runtime</h2>
+          <p>
+            A request path is evaluated against policy in Sigil, enforced in Conduit, and emitted as telemetry to Trace. This
+            closes the loop between policy intent and observed runtime behavior.
+          </p>
+          <ul>
+            <li>Identity: cert-backed service trust with explicit caller and destination identity.</li>
+            <li>Policy: allow and deny decisions resolved before traffic continuation.</li>
+            <li>Enforcement: Conduit applies policy on the data path.</li>
+            <li>Visibility: Trace stores verdict and latency signals for operators.</li>
+          </ul>
         </section>
       </article>
     </main>
