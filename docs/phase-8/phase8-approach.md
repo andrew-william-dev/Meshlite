@@ -12,6 +12,13 @@
 
 Ship `meshctl` as a downloadable, versioned binary so the operator CLI works from any terminal without needing the Go source tree — and add it as an optional post-install verifier inside the Helm chart for CI/cluster-side validation.
 
+### Deployment answer (short version)
+
+`meshctl` is **not deployed as a long-running Helm workload** for terminal usage.
+
+- For operators/devs: deploy by installing a versioned binary to local PATH (primary path).
+- For cluster verification: deploy as an optional one-shot Helm hook Job that runs `meshctl status` and exits.
+
 ---
 
 ## 2. Scope
@@ -43,6 +50,15 @@ Ship `meshctl` as a downloadable, versioned binary so the operator CLI works fro
 ### 3A — Why binary release assets, not Helm-only?
 
 The current workflow requires `go run ./meshctl ...` against a local source tree. This blocks anyone without Go installed and couples the CLI to the repo working copy. Publishing static binaries decouples the two.
+
+### 3A.1 — Deployment model by target environment
+
+| Target | Deployment method | Lifetime | Owner |
+|--------|-------------------|----------|-------|
+| Developer/operator terminal | Install `meshctl` binary (or installer script) into PATH | Persistent until upgraded | User machine |
+| Kubernetes runtime checks | Helm post-install/post-upgrade Job using `meshctl` container image | One-shot and exits | Helm release |
+
+This split keeps interactive CLI usage simple and avoids shipping an always-on meshctl pod that provides no continuous runtime value.
 
 ### 3B — Why also a Helm Job hook?
 
@@ -88,6 +104,8 @@ Runs after `validate`, in parallel with `publish-images`. Steps:
 Minimal two-stage Dockerfile (`golang:1.25-alpine` builder → `scratch` runtime). Published alongside the other component images by extending the existing `publish-images` matrix.
 
 Used by the Helm Job hook so it does not need a binary mount.
+
+It is **not** the primary delivery mechanism for human CLI usage.
 
 ### 4.3 Install scripts
 
