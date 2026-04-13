@@ -1,6 +1,6 @@
 # MeshLite — Phase 8 Approach
 
-## meshctl Distribution — Binary Release Pipeline
+## meshctl Distribution — No-Dependency CLI Delivery
 
 > **Status:** Draft — awaiting review  
 > **Author:** GitHub Copilot  
@@ -10,14 +10,23 @@
 
 ## 1. Goal
 
-Ship `meshctl` as a downloadable, versioned binary so the operator CLI works from any terminal without needing the Go source tree — and add it as an optional post-install verifier inside the Helm chart for CI/cluster-side validation.
+Ship `meshctl` as a downloadable, versioned CLI so operators use it like Angular CLI: install once, run from any terminal, no Go toolchain, no repo checkout, no `go run`.
 
 ### Deployment answer (short version)
 
 `meshctl` is **not deployed as a long-running Helm workload** for terminal usage.
 
-- For operators/devs: deploy by installing a versioned binary to local PATH (primary path).
+- For operators/devs: deliver as a global CLI install (primary path).
 - For cluster verification: deploy as an optional one-shot Helm hook Job that runs `meshctl status` and exits.
+
+### Operator experience contract (Angular CLI style)
+
+Every release must support this flow:
+
+1. Install: one command (`curl | sh` or `irm | iex`)
+2. Use immediately: `meshctl version`, `meshctl status`, `meshctl verify ...`
+3. Upgrade: rerun installer (or version-pinned installer)
+4. No dependency on Go, local source code, or build tools
 
 ---
 
@@ -49,7 +58,7 @@ Ship `meshctl` as a downloadable, versioned binary so the operator CLI works fro
 
 ### 3A — Why binary release assets, not Helm-only?
 
-The current workflow requires `go run ./meshctl ...` against a local source tree. This blocks anyone without Go installed and couples the CLI to the repo working copy. Publishing static binaries decouples the two.
+Helm is for cluster resources; `meshctl` is a user CLI. Binary release assets are the correct distribution channel for terminal usage and avoid all runtime dependency on Go or a local source tree.
 
 ### 3A.1 — Deployment model by target environment
 
@@ -60,13 +69,17 @@ The current workflow requires `go run ./meshctl ...` against a local source tree
 
 This split keeps interactive CLI usage simple and avoids shipping an always-on meshctl pod that provides no continuous runtime value.
 
+### 3A.2 — Policy decision: no `go run` in docs or quickstarts
+
+Starting in Phase 8, all operator-facing docs and quickstarts must use installed `meshctl` commands only. `go run ./meshctl` is allowed for maintainers in local development notes only, not in user runbooks.
+
 ### 3B — Why also a Helm Job hook?
 
 `meshctl status` hits Sigil's `/api/v1/certs` and `/api/v1/policy` and Trace's `/api/v1/summary`. This is a perfect post-install smoke test: if the Job completes successfully, all three components are reachable and healthy. The Job is opt-in (`meshctl.hookEnabled: false` by default).
 
 ### 3C — Version injection strategy
 
-`cmd/root.go` already declares `version = "v0.5.0-mvp"`. We change this to `version = "dev"` (sentinel) and inject the real value at build time:
+`cmd/root.go` uses `version = "dev"` as a sentinel and CI injects the release version at build time:
 
 ```
 go build -ldflags "-X github.com/meshlite/meshctl/cmd.version=v0.5.4" ...
@@ -99,6 +112,16 @@ Runs after `validate`, in parallel with `publish-images`. Steps:
 5. Archive each binary (`.tar.gz` or `.zip`)
 6. Attach archives to the GitHub Release via `softprops/action-gh-release`
 
+### 4.1.1 Asset naming and install compatibility
+
+Each asset must follow a deterministic name so install scripts can resolve it reliably:
+
+- `meshctl_<version>_linux_amd64.tar.gz`
+- `meshctl_<version>_linux_arm64.tar.gz`
+- `meshctl_<version>_darwin_amd64.tar.gz`
+- `meshctl_<version>_darwin_arm64.tar.gz`
+- `meshctl_<version>_windows_amd64.zip`
+
 ### 4.2 Container image: `meshctl` Docker image
 
 Minimal two-stage Dockerfile (`golang:1.25-alpine` builder → `scratch` runtime). Published alongside the other component images by extending the existing `publish-images` matrix.
@@ -107,7 +130,7 @@ Used by the Helm Job hook so it does not need a binary mount.
 
 It is **not** the primary delivery mechanism for human CLI usage.
 
-### 4.3 Install scripts
+### 4.3 Install scripts (primary user entrypoint)
 
 **`hack/install-meshctl.sh`** (Unix):
 ```
@@ -125,6 +148,13 @@ irm https://raw.githubusercontent.com/.../hack/install-meshctl.ps1 | iex
 - Same approach: detect arch, download `.zip`, extract to `$env:LOCALAPPDATA\meshctl\`
 - Adds to user `$PATH` permanently via `[Environment]::SetEnvironmentVariable`
 
+Installer behavior requirements:
+
+- Works on a clean machine with no Go installed
+- Supports `latest` and explicit version (for example `v0.5.5`)
+- Fails fast with clear error output when download or extraction fails
+- Verifies install by executing `meshctl version`
+
 ### 4.4 Helm — optional post-install Job hook
 
 New template `charts/meshlite/templates/meshctl-verify-job.yaml`:
@@ -137,12 +167,18 @@ New template `charts/meshlite/templates/meshctl-verify-job.yaml`:
 
 ---
 
-## 5. Dependencies
+## 5. Implementation Dependencies (not end-user dependencies)
 
 - Phase 6 complete: `release.yml` already handles validate → publish-images → publish-charts.
 - `meshctl/go.mod` already has a valid module path (`github.com/meshlite/meshctl`).
 - GHCR push permission already granted (`permissions: packages: write` in release.yml).
 - GitHub Release creation already handled by `softprops/action-gh-release` step (we extend it, not replace it).
+
+End-user dependency stance:
+
+- Users do not need Go.
+- Users do not need the MeshLite repository checked out.
+- Users only need an installed `meshctl` binary in PATH.
 
 ---
 
@@ -151,10 +187,10 @@ New template `charts/meshlite/templates/meshctl-verify-job.yaml`:
 | # | Criterion | How to verify |
 |---|-----------|---------------|
 | EC-1 | `meshctl version` prints the tagged semver (e.g. `meshctl v0.5.5`), not `dev` or `v0.5.0-mvp` | Run `meshctl version` after installing from release asset |
-| EC-2 | Linux amd64 binary downloads and runs on a machine without Go installed | `curl` download script + `meshctl version` |
-| EC-3 | Windows amd64 binary works in PowerShell | Install script + `meshctl version` |
+| EC-2 | Linux amd64 install works on a machine without Go or repo checkout | `curl` install script + `meshctl version` |
+| EC-3 | Windows amd64 install works in PowerShell without Go or repo checkout | Install script + `meshctl version` |
 | EC-4 | Apple Silicon binary works on macOS arm64 | `meshctl version` on M-series Mac |
-| EC-5 | `meshctl status` returns live data after port-forwarding Sigil and Trace | Port-forward + `meshctl status` |
+| EC-5 | `meshctl status` returns live data after port-forwarding Sigil and Trace using installed CLI | Port-forward + `meshctl status` |
 | EC-6 | Helm post-install Job completes with exit 0 after `helm upgrade` | `kubectl get jobs -n meshlite-system` shows `Completed` |
 | EC-7 | `release.yml` publishes all 5 binary archives to the GitHub Release page | GitHub Releases page shows `.tar.gz`/`.zip` assets |
 
@@ -178,7 +214,7 @@ New template `charts/meshlite/templates/meshctl-verify-job.yaml`:
 Stage 1 — Approach      ← this document (review and agree before proceeding)
 Stage 2 — Runbook       → docs/phase-8/phase8-runbook.md
 Stage 3 — Coding        → pipeline job, Dockerfile, install scripts, Helm hook
-Stage 4 — Execution     → tag a test release, verify downloads, run install scripts
+Stage 4 — Execution     → tag a test release, verify zero-dependency installs, run install scripts
 Stage 5 — Report        → docs/phase-8/phase8-outcome-report.md
 Stage 6 — Discussion    → merge to main, update timeline.md
 ```
@@ -190,5 +226,6 @@ Stage 6 — Discussion    → merge to main, update timeline.md
 - [ ] Platform matrix confirmed (especially: do you need linux/arm64 and darwin/amd64?)
 - [ ] Helm hook opt-in by default confirmed (`hookEnabled: false`)
 - [ ] Install script delivery method confirmed (raw GitHub URL vs separate CDN)
+- [ ] No user-facing doc still contains `go run ./meshctl`
 - [ ] Version sentinel `"dev"` acceptable (vs keeping a hardcoded fallback)
 - [ ] meshctl container image added to the `publish-images` matrix confirmed
