@@ -257,11 +257,14 @@ jobs:
           TARGET_DIR="${OUT_DIR}/${TARGET_BASENAME}"
           mkdir -p "$TARGET_DIR"
 
-          CGO_ENABLED=0 GOOS='${{ matrix.goos }}' GOARCH='${{ matrix.goarch }}' \
-            go build -trimpath \
-              -ldflags "-s -w -X github.com/meshlite/meshctl/cmd.version=v${VERSION}" \
-              -o "${TARGET_DIR}/${BIN_NAME}" \
-              ./meshctl
+          (
+            cd meshctl
+            CGO_ENABLED=0 GOOS='${{ matrix.goos }}' GOARCH='${{ matrix.goarch }}' \
+              go build -trimpath \
+                -ldflags "-s -w -X github.com/meshlite/meshctl/cmd.version=v${VERSION}" \
+                -o "../${TARGET_DIR}/${BIN_NAME}" \
+                .
+          )
 
           if [[ '${{ matrix.archive_ext }}' == 'zip' ]]; then
             (cd "$OUT_DIR" && zip -q -r "${TARGET_BASENAME}.zip" "${TARGET_BASENAME}")
