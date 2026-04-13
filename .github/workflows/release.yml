@@ -4,12 +4,18 @@ on:
   push:
     tags:
       - 'v*.*.*'
+      - 'v*.*.*-*'
   workflow_dispatch:
     inputs:
       version:
         description: 'Release version without the leading v (example: 0.5.1)'
         required: true
         type: string
+      prerelease:
+        description: 'Mark release as prerelease (recommended for RC/test releases)'
+        required: false
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -93,6 +99,9 @@ jobs:
           - component: trace
             context: .
             file: ./trace/backend/Dockerfile
+          - component: meshctl
+            context: .
+            file: ./meshctl/Dockerfile
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -176,8 +185,148 @@ jobs:
             helm push "$chart" "${{ env.CHART_REGISTRY }}"
           done
 
+      - name: Upload chart artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: chart-packages
+          path: .release/charts/*.tgz
+
+  publish-meshctl:
+    name: Build meshctl release binaries
+    needs: validate
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            archive_ext: tar.gz
+          - goos: linux
+            goarch: arm64
+            archive_ext: tar.gz
+          - goos: darwin
+            goarch: amd64
+            archive_ext: tar.gz
+          - goos: darwin
+            goarch: arm64
+            archive_ext: tar.gz
+          - goos: windows
+            goarch: amd64
+            archive_ext: zip
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.0'
+          cache: true
+          cache-dependency-path: meshctl/go.sum
+
+      - name: Resolve release version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF:-}" == refs/tags/* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="${{ github.event.inputs.version }}"
+          fi
+          if [[ -z "$VERSION" ]]; then
+            echo "Release version is empty" >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build and archive meshctl (${{ matrix.goos }}/${{ matrix.goarch }})
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION='${{ steps.version.outputs.version }}'
+          OUT_DIR='.release/meshctl'
+          BIN_NAME='meshctl'
+          if [[ '${{ matrix.goos }}' == 'windows' ]]; then
+            BIN_NAME='meshctl.exe'
+          fi
+
+          mkdir -p "$OUT_DIR"
+          TARGET_BASENAME="meshctl_${VERSION}_${{ matrix.goos }}_${{ matrix.goarch }}"
+          TARGET_DIR="${OUT_DIR}/${TARGET_BASENAME}"
+          mkdir -p "$TARGET_DIR"
+
+          CGO_ENABLED=0 GOOS='${{ matrix.goos }}' GOARCH='${{ matrix.goarch }}' \
+            go build -trimpath \
+              -ldflags "-s -w -X github.com/meshlite/meshctl/cmd.version=v${VERSION}" \
+              -o "${TARGET_DIR}/${BIN_NAME}" \
+              ./meshctl
+
+          if [[ '${{ matrix.archive_ext }}' == 'zip' ]]; then
+            (cd "$OUT_DIR" && zip -q -r "${TARGET_BASENAME}.zip" "${TARGET_BASENAME}")
+          else
+            tar -C "$OUT_DIR" -czf "${OUT_DIR}/${TARGET_BASENAME}.tar.gz" "${TARGET_BASENAME}"
+          fi
+
+      - name: Upload meshctl binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: meshctl-binaries-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: .release/meshctl/*.${{ matrix.archive_ext }}
+
+  publish-release:
+    name: Create GitHub release
+    needs:
+      - publish-charts
+      - publish-meshctl
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve release metadata
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF:-}" == refs/tags/* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="${{ github.event.inputs.version }}"
+          fi
+          if [[ -z "$VERSION" ]]; then
+            echo "Release version is empty" >&2
+            exit 1
+          fi
+
+          PRERELEASE='false'
+          if [[ "$VERSION" == *-* ]]; then
+            PRERELEASE='true'
+          elif [[ "${{ github.event_name }}" == 'workflow_dispatch' ]]; then
+            PRERELEASE='${{ github.event.inputs.prerelease }}'
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
+
+      - name: Download chart artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: chart-packages
+          path: .release/charts
+
+      - name: Download meshctl binary artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: meshctl-binaries-*
+          path: .release/meshctl
+          merge-multiple: true
+
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          files: .release/charts/*.tgz
+          tag_name: ${{ steps.meta.outputs.tag }}
+          prerelease: ${{ steps.meta.outputs.prerelease }}
+          files: |
+            .release/charts/*.tgz
+            .release/meshctl/*
           generate_release_notes: true
