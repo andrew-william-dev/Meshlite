@@ -23,34 +23,40 @@ const emptyTopology: Topology = {
   edges: [],
 };
 
-const viewOptions: Array<{ id: ViewMode; label: string; description: string }> = [
+const viewOptions: Array<{ id: ViewMode; icon: string; label: string; description: string }> = [
   {
     id: 'application',
+    icon: '↔',
     label: 'App traffic',
     description: 'Hide mesh and cluster chatter so user journeys stay readable.',
   },
   {
     id: 'crossCluster',
+    icon: '↗',
     label: 'Cross-cluster',
     description: 'Show only calls that traverse cluster boundaries.',
   },
   {
     id: 'policy',
+    icon: '⚠',
     label: 'Risk events',
     description: 'Focus on denials, TLS failures, and delivery problems.',
   },
   {
     id: 'platform',
+    icon: '⚙',
     label: 'Platform',
     description: 'Include mesh internals and infrastructure traffic when needed.',
   },
   {
     id: 'logs',
+    icon: '☰',
     label: 'Request log',
     description: 'Full paginated request log with verdict filtering.',
   },
   {
     id: 'performance',
+    icon: '⚡',
     label: 'Performance',
     description: 'Per-path latency percentiles sorted by worst p99.',
   },
@@ -231,7 +237,7 @@ export function App() {
   const isFullWidthView = viewMode === 'logs' || viewMode === 'performance';
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell view-${viewMode}`}>
       <aside className="sidebar">
         <div>
           <div className="brand-kicker">MeshLite</div>
@@ -249,7 +255,10 @@ export function App() {
                 className={`sidebar-button ${viewMode === option.id ? 'active' : ''}`}
                 onClick={() => setViewMode(option.id)}
               >
-                <strong>{option.label}</strong>
+                <div className="sbtn-row">
+                  <span className="sbtn-icon">{option.icon}</span>
+                  <strong>{option.label}</strong>
+                </div>
                 <span>{option.description}</span>
               </button>
             ))}
@@ -287,7 +296,8 @@ export function App() {
       <main className="content">
         <header className="topbar">
           <div>
-            <h1>Service journey dashboard</h1>
+            <p className="topbar-kicker">MeshLite Trace</p>
+            <h1>{activeView.icon} {activeView.label}</h1>
             <p>{activeView.description}</p>
           </div>
           <div className="topbar-status">
@@ -307,7 +317,7 @@ export function App() {
             <section className="hero-strip">
               <div className="hero-card">
                 <span className="eyebrow">Current lens</span>
-                <strong>{activeView.label}</strong>
+                <strong>{activeView.icon} {activeView.label}</strong>
                 <p>{activeView.description}</p>
               </div>
               <div className="hero-card">
