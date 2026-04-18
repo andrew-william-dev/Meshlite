@@ -268,11 +268,6 @@ h1 {
   background: rgba(61,214,140,0.04);
   box-shadow: inset 3px 0 0 var(--teal);
 }
-.cmp-row-on .ml-cell {
-  background: rgba(61,214,140,0.1);
-  border-radius: 8px;
-  outline: 1px solid rgba(61,214,140,0.22);
-}
 .cmp-feat {
   font-weight: 600; font-size: 0.92rem;
   color: var(--text); padding-top: 0.15rem;
@@ -280,7 +275,6 @@ h1 {
 .cmp-cell {
   display: flex; flex-direction: column; gap: 0.28rem;
   border-radius: 8px;
-  transition: background 0.22s ease, outline-color 0.22s ease;
 }
 .cmp-metric-wrap { display: flex; align-items: baseline; gap: 0.35rem; }
 .cmp-num  { font-size: 1.45rem; font-weight: 800; line-height: 1; }
