@@ -1,6 +1,7 @@
 package store
 
 import (
+	"net"
 	"sort"
 	"strings"
 	"sync"
@@ -19,6 +20,13 @@ type TelemetryRecord struct {
 	StatusCode         int       `json:"status_code,omitempty"`
 	ErrorReason        string    `json:"error_reason,omitempty"`
 	Timestamp          time.Time `json:"timestamp,omitempty"`
+	// Extended optional fields emitted by newer agent versions.
+	Protocol  string `json:"protocol,omitempty"`   // tcp | http | grpc | https
+	RequestID string `json:"request_id,omitempty"` // correlation / trace id
+	SourceIP  string `json:"source_ip,omitempty"`  // raw source IP fallback for service name
+	DestIP    string `json:"dest_ip,omitempty"`    // raw dest IP fallback for service name
+	BytesIn   int64  `json:"bytes_in,omitempty"`
+	BytesOut  int64  `json:"bytes_out,omitempty"`
 }
 
 type Summary struct {
@@ -71,6 +79,42 @@ type Event struct {
 	StatusCode         int       `json:"status_code,omitempty"`
 	LatencyMs          float64   `json:"latency_ms,omitempty"`
 	Timestamp          time.Time `json:"timestamp"`
+	// Extended — present when emitted by the agent.
+	Protocol  string `json:"protocol,omitempty"`
+	RequestID string `json:"request_id,omitempty"`
+	BytesIn   int64  `json:"bytes_in,omitempty"`
+	BytesOut  int64  `json:"bytes_out,omitempty"`
+}
+
+// PerformanceEdge carries per-path latency and throughput statistics.
+type PerformanceEdge struct {
+	Source    string    `json:"source"`
+	Target    string    `json:"target"`
+	Leg       string    `json:"leg"`
+	Requests  int64     `json:"requests"`
+	P50Ms     float64   `json:"p50_ms"`
+	P95Ms     float64   `json:"p95_ms"`
+	P99Ms     float64   `json:"p99_ms"`
+	MinMs     float64   `json:"min_ms"`
+	MaxMs     float64   `json:"max_ms"`
+	AvgMs     float64   `json:"avg_ms"`
+	BytesIn   int64     `json:"bytes_in"`
+	BytesOut  int64     `json:"bytes_out"`
+	ErrorRate float64   `json:"error_rate"` // (deny+tls+error)/requests × 100
+	LastSeen  time.Time `json:"last_seen"`
+}
+
+// PerformanceReport is the payload returned by /api/v1/perf.
+type PerformanceReport struct {
+	Edges       []PerformanceEdge `json:"edges"`
+	GeneratedAt time.Time         `json:"generated_at"`
+}
+
+// EventQuery filters the events returned by Store.Events.
+type EventQuery struct {
+	Service string // filter by source or destination name; empty = all
+	Verdict string // filter by verdict; empty or "all" = all verdicts
+	Limit   int    // max results; <= 0 defaults to 200, capped at 1000
 }
 
 type nodeState struct {
@@ -91,6 +135,8 @@ type edgeState struct {
 	lastLatencyMs float64
 	lastSeen      time.Time
 	latencies     []float64
+	bytesIn       int64
+	bytesOut      int64
 }
 
 // Store keeps an in-memory view of current service topology and recent events.
@@ -105,7 +151,7 @@ type Store struct {
 
 func New(maxEvents int) *Store {
 	if maxEvents <= 0 {
-		maxEvents = 200
+		maxEvents = 500
 	}
 	return &Store{
 		nodes:     make(map[string]*nodeState),
@@ -115,13 +161,12 @@ func New(maxEvents int) *Store {
 	}
 }
 
+// NormalizeRecord fills in default values. When source_service or
+// destination_service is blank or "unknown", it falls back to the raw IP
+// so that destination nodes are always identifiable in the topology.
 func NormalizeRecord(r TelemetryRecord) TelemetryRecord {
-	if strings.TrimSpace(r.SourceService) == "" {
-		r.SourceService = "unknown"
-	}
-	if strings.TrimSpace(r.DestinationService) == "" {
-		r.DestinationService = "unknown"
-	}
+	r.SourceService = normalizeServiceName(r.SourceService, r.SourceIP)
+	r.DestinationService = normalizeServiceName(r.DestinationService, r.DestIP)
 	if strings.TrimSpace(r.Leg) == "" {
 		r.Leg = "intra_cluster"
 	}
@@ -134,7 +179,26 @@ func NormalizeRecord(r TelemetryRecord) TelemetryRecord {
 	return r
 }
 
-func (s *Store) AddRecord(record TelemetryRecord) {
+// normalizeServiceName returns a stable service identifier. Falls back to the
+// raw IP (port stripped) when the service name is absent or generic.
+func normalizeServiceName(name, ip string) string {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" || strings.EqualFold(trimmed, "unknown") {
+		if ip != "" {
+			if host, _, err := net.SplitHostPort(ip); err == nil {
+				return host
+			}
+			return ip
+		}
+		return "unknown"
+	}
+	return trimmed
+}
+
+// AddRecord normalizes the record, updates all counters and topology state,
+// appends to the event log (every verdict, not just failures), and returns the
+// normalized form so the caller can use it for Prometheus labels.
+func (s *Store) AddRecord(record TelemetryRecord) TelemetryRecord {
 	r := NormalizeRecord(record)
 
 	s.mu.Lock()
@@ -164,24 +228,23 @@ func (s *Store) AddRecord(record TelemetryRecord) {
 	if r.LatencyMs > 0 {
 		edge.lastLatencyMs = r.LatencyMs
 		edge.latencies = append(edge.latencies, r.LatencyMs)
-		if len(edge.latencies) > 256 {
-			edge.latencies = edge.latencies[len(edge.latencies)-256:]
+		if len(edge.latencies) > 512 {
+			edge.latencies = edge.latencies[len(edge.latencies)-512:]
 		}
 	}
+	edge.bytesIn += r.BytesIn
+	edge.bytesOut += r.BytesOut
 
 	switch r.Verdict {
 	case "deny":
 		s.summary.Denied++
 		edge.denyCount++
-		s.appendEventLocked(r)
 	case "tls_reject":
 		s.summary.TLSFailures++
 		edge.tlsRejects++
-		s.appendEventLocked(r)
 	case "error":
 		s.summary.Errors++
 		edge.errorCount++
-		s.appendEventLocked(r)
 	default:
 		s.summary.Allowed++
 		edge.allowCount++
@@ -189,6 +252,11 @@ func (s *Store) AddRecord(record TelemetryRecord) {
 
 	s.summary.ActiveEdges = len(s.edges)
 	s.summary.ActiveServices = len(s.nodes)
+
+	// Every record goes into the log — the UI decides what to show.
+	s.appendEventLocked(r)
+
+	return r
 }
 
 func (s *Store) appendEventLocked(r TelemetryRecord) {
@@ -202,6 +270,10 @@ func (s *Store) appendEventLocked(r TelemetryRecord) {
 		StatusCode:         r.StatusCode,
 		LatencyMs:          r.LatencyMs,
 		Timestamp:          r.Timestamp,
+		Protocol:           r.Protocol,
+		RequestID:          r.RequestID,
+		BytesIn:            r.BytesIn,
+		BytesOut:           r.BytesOut,
 	}}, s.events...)
 	if len(s.events) > s.maxEvents {
 		s.events = s.events[:s.maxEvents]
@@ -253,23 +325,68 @@ func (s *Store) Topology() Topology {
 	return Topology{Nodes: nodes, Edges: edges, GeneratedAt: time.Now().UTC()}
 }
 
-func (s *Store) Events(filterService string) []Event {
+// Events returns a filtered, paginated slice of the event log (newest-first).
+func (s *Store) Events(q EventQuery) []Event {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	if strings.TrimSpace(filterService) == "" {
-		out := make([]Event, len(s.events))
-		copy(out, s.events)
-		return out
+	limit := q.Limit
+	if limit <= 0 {
+		limit = 200
+	}
+	if limit > 1000 {
+		limit = 1000
 	}
 
-	filtered := make([]Event, 0, len(s.events))
+	out := make([]Event, 0, limit)
 	for _, event := range s.events {
-		if event.SourceService == filterService || event.DestinationService == filterService {
-			filtered = append(filtered, event)
+		if len(out) >= limit {
+			break
 		}
+		if q.Service != "" && event.SourceService != q.Service && event.DestinationService != q.Service {
+			continue
+		}
+		if q.Verdict != "" && q.Verdict != "all" && event.Verdict != q.Verdict {
+			continue
+		}
+		out = append(out, event)
 	}
-	return filtered
+	return out
+}
+
+// Performance returns per-path latency and throughput statistics sorted by p99 descending.
+func (s *Store) Performance() PerformanceReport {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	edges := make([]PerformanceEdge, 0, len(s.edges))
+	for _, edge := range s.edges {
+		issues := edge.denyCount + edge.tlsRejects + edge.errorCount
+		errorRate := 0.0
+		if edge.requests > 0 {
+			errorRate = float64(issues) / float64(edge.requests) * 100.0
+		}
+		edges = append(edges, PerformanceEdge{
+			Source:    edge.source,
+			Target:    edge.target,
+			Leg:       edge.leg,
+			Requests:  edge.requests,
+			P50Ms:     percentile(edge.latencies, 0.50),
+			P95Ms:     percentile(edge.latencies, 0.95),
+			P99Ms:     percentile(edge.latencies, 0.99),
+			MinMs:     minSlice(edge.latencies),
+			MaxMs:     maxSlice(edge.latencies),
+			AvgMs:     avgSlice(edge.latencies),
+			BytesIn:   edge.bytesIn,
+			BytesOut:  edge.bytesOut,
+			ErrorRate: errorRate,
+			LastSeen:  edge.lastSeen,
+		})
+	}
+	sort.Slice(edges, func(i, j int) bool {
+		return edges[i].P99Ms > edges[j].P99Ms
+	})
+	return PerformanceReport{Edges: edges, GeneratedAt: time.Now().UTC()}
 }
 
 func percentile(values []float64, pct float64) float64 {
@@ -286,4 +403,41 @@ func percentile(values []float64, pct float64) float64 {
 		idx = len(cp) - 1
 	}
 	return cp[idx]
+}
+
+func minSlice(values []float64) float64 {
+	if len(values) == 0 {
+		return 0
+	}
+	min := values[0]
+	for _, v := range values[1:] {
+		if v < min {
+			min = v
+		}
+	}
+	return min
+}
+
+func maxSlice(values []float64) float64 {
+	if len(values) == 0 {
+		return 0
+	}
+	max := values[0]
+	for _, v := range values[1:] {
+		if v > max {
+			max = v
+		}
+	}
+	return max
+}
+
+func avgSlice(values []float64) float64 {
+	if len(values) == 0 {
+		return 0
+	}
+	sum := 0.0
+	for _, v := range values {
+		sum += v
+	}
+	return sum / float64(len(values))
 }

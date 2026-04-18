@@ -1,28 +1,22 @@
 import { useEffect, useMemo, useState } from 'react';
 import { EventFeed } from './components/EventFeed';
+import { LogViewer } from './components/LogViewer';
+import { PerformancePanel } from './components/PerformancePanel';
 import { ServiceGraph } from './components/ServiceGraph';
 import { TrafficSummary } from './components/TrafficSummary';
 import {
   fetchEvents,
-  fetchSummary,
+  fetchPerformance,
   fetchTopology,
   type EventItem,
+  type PerformanceReport,
   type Summary,
   type Topology,
   type TopologyEdge,
 } from './lib/api';
+import { formatTimestamp } from './lib/utils';
 
-type ViewMode = 'application' | 'crossCluster' | 'policy' | 'platform';
-
-const emptySummary: Summary = {
-  total_requests: 0,
-  allowed: 0,
-  denied: 0,
-  tls_failures: 0,
-  errors: 0,
-  active_edges: 0,
-  active_services: 0,
-};
+type ViewMode = 'application' | 'crossCluster' | 'policy' | 'platform' | 'logs' | 'performance';
 
 const emptyTopology: Topology = {
   nodes: [],
@@ -49,6 +43,16 @@ const viewOptions: Array<{ id: ViewMode; label: string; description: string }> =
     id: 'platform',
     label: 'Platform',
     description: 'Include mesh internals and infrastructure traffic when needed.',
+  },
+  {
+    id: 'logs',
+    label: 'Request log',
+    description: 'Full paginated request log with verdict filtering.',
+  },
+  {
+    id: 'performance',
+    label: 'Performance',
+    description: 'Per-path latency percentiles sorted by worst p99.',
   },
 ];
 
@@ -118,21 +122,10 @@ function buildSummary(edges: TopologyEdge[]): Summary {
   };
 }
 
-function formatTimestamp(value?: string) {
-  if (!value) {
-    return 'awaiting traffic';
-  }
-
-  const timestamp = new Date(value);
-  return Number.isNaN(timestamp.getTime())
-    ? 'awaiting traffic'
-    : timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-}
-
 export function App() {
-  const [summary, setSummary] = useState<Summary>(emptySummary);
   const [topology, setTopology] = useState<Topology>(emptyTopology);
-  const [events, setEvents] = useState<EventItem[]>([]);
+  const [allEvents, setAllEvents] = useState<EventItem[]>([]);
+  const [performance, setPerformance] = useState<PerformanceReport>({ edges: [] });
   const [error, setError] = useState<string>('');
   const [viewMode, setViewMode] = useState<ViewMode>('application');
   const [focusService, setFocusService] = useState<string>('all');
@@ -142,15 +135,15 @@ export function App() {
 
     const load = async () => {
       try {
-        const [nextSummary, nextTopology, nextEvents] = await Promise.all([
-          fetchSummary(),
+        const [nextTopology, nextEvents, nextPerf] = await Promise.all([
           fetchTopology(),
-          fetchEvents(),
+          fetchEvents({ limit: 500 }),
+          fetchPerformance(),
         ]);
         if (!disposed) {
-          setSummary(nextSummary);
           setTopology(nextTopology);
-          setEvents(nextEvents);
+          setAllEvents(nextEvents);
+          setPerformance(nextPerf);
           setError('');
         }
       } catch (err) {
@@ -212,7 +205,7 @@ export function App() {
   const visibleSummary = useMemo(() => buildSummary(visibleEdges), [visibleEdges]);
 
   const visibleEvents = useMemo(() => {
-    return events.filter((event) => {
+    return allEvents.filter((event) => {
       const serviceMatch = focusService === 'all'
         || event.source_service === focusService
         || event.destination_service === focusService;
@@ -221,13 +214,21 @@ export function App() {
       const crossClusterMatch = viewMode !== 'crossCluster' || event.leg === 'cross_cluster';
       return serviceMatch && platformMatch && crossClusterMatch;
     });
-  }, [events, focusService, viewMode]);
+  }, [allEvents, focusService, viewMode]);
+
+  // Events shown in the watchlist are only deny/tls_reject/error.
+  const watchlistEvents = useMemo(
+    () => visibleEvents.filter((e) => e.verdict !== 'allow'),
+    [visibleEvents],
+  );
 
   const activeView = viewOptions.find((option) => option.id === viewMode) ?? viewOptions[0];
   const topJourney = visibleEdges[0];
   const heroDetail = topJourney
     ? `${topJourney.requests} requests · p95 ${topJourney.p95_ms.toFixed(1)} ms · ${topJourney.leg === 'cross_cluster' ? 'cross-cluster' : 'in-cluster'}`
     : 'Generate traffic from the validator demo to populate this view.';
+
+  const isFullWidthView = viewMode === 'logs' || viewMode === 'performance';
 
   return (
     <div className="app-shell">
@@ -291,50 +292,58 @@ export function App() {
           </div>
           <div className="topbar-status">
             <span className="status-dot" />
-            Data refreshed {formatTimestamp(summary.generated_at || topology.generated_at)}
+            Data refreshed {formatTimestamp(topology.generated_at)}
           </div>
         </header>
 
         {error ? <div className="error-banner">Trace API error: {error}</div> : null}
 
-        <section className="hero-strip">
-          <div className="hero-card">
-            <span className="eyebrow">Current lens</span>
-            <strong>{activeView.label}</strong>
-            <p>{activeView.description}</p>
-          </div>
-          <div className="hero-card">
-            <span className="eyebrow">Focus</span>
-            <strong>{focusService === 'all' ? 'All visible services' : focusService}</strong>
-            <p>{visibleSummary.active_edges} active journeys across {visibleSummary.active_services} services.</p>
-          </div>
-          <div className="hero-card emphasis">
-            <span className="eyebrow">Top journey</span>
-            <strong>{topJourney ? `${topJourney.source} → ${topJourney.target}` : 'No active journeys yet'}</strong>
-            <p>{heroDetail}</p>
-          </div>
-        </section>
+        {isFullWidthView ? (
+          viewMode === 'logs'
+            ? <LogViewer events={visibleEvents} />
+            : <PerformancePanel edges={performance.edges} />
+        ) : (
+          <>
+            <section className="hero-strip">
+              <div className="hero-card">
+                <span className="eyebrow">Current lens</span>
+                <strong>{activeView.label}</strong>
+                <p>{activeView.description}</p>
+              </div>
+              <div className="hero-card">
+                <span className="eyebrow">Focus</span>
+                <strong>{focusService === 'all' ? 'All visible services' : focusService}</strong>
+                <p>{visibleSummary.active_edges} active journeys across {visibleSummary.active_services} services.</p>
+              </div>
+              <div className="hero-card emphasis">
+                <span className="eyebrow">Top journey</span>
+                <strong>{topJourney ? `${topJourney.source} → ${topJourney.target}` : 'No active journeys yet'}</strong>
+                <p>{heroDetail}</p>
+              </div>
+            </section>
 
-        {viewMode !== 'platform' ? (
-          <div className="view-banner">
-            Platform and cluster noise is hidden in this view. Switch to <strong>Platform</strong> if you want to inspect internal mesh traffic.
-          </div>
-        ) : null}
+            {viewMode !== 'platform' ? (
+              <div className="view-banner">
+                Platform and cluster noise is hidden in this view. Switch to <strong>Platform</strong> if you want to inspect internal mesh traffic.
+              </div>
+            ) : null}
 
-        <TrafficSummary summary={visibleSummary} edges={visibleTopology.edges} viewLabel={activeView.label} />
+            <TrafficSummary summary={visibleSummary} edges={visibleTopology.edges} viewLabel={activeView.label} />
 
-        <div className="layout-grid">
-          <ServiceGraph
-            topology={visibleTopology}
-            viewLabel={activeView.label}
-            focusService={focusService === 'all' ? undefined : focusService}
-          />
-          <EventFeed
-            events={visibleEvents}
-            edges={visibleTopology.edges}
-            focusService={focusService === 'all' ? undefined : focusService}
-          />
-        </div>
+            <div className="layout-grid">
+              <ServiceGraph
+                topology={visibleTopology}
+                viewLabel={activeView.label}
+                focusService={focusService === 'all' ? undefined : focusService}
+              />
+              <EventFeed
+                events={watchlistEvents}
+                edges={visibleTopology.edges}
+                focusService={focusService === 'all' ? undefined : focusService}
+              />
+            </div>
+          </>
+        )}
       </main>
     </div>
   );

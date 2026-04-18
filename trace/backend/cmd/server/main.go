@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -29,7 +30,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	store := storepkg.New(250)
+	store := storepkg.New(1000)
 	registry := prometheus.NewRegistry()
 
 	requestsTotal := prometheus.NewCounterVec(
@@ -83,8 +84,7 @@ func main() {
 		}
 
 		for _, record := range records {
-			normalized := storepkg.NormalizeRecord(record)
-			store.AddRecord(normalized)
+			normalized := store.AddRecord(record)
 			requestsTotal.WithLabelValues(normalized.SourceService, normalized.DestinationService, normalized.Leg, normalized.Verdict).Inc()
 			if normalized.LatencyMs > 0 {
 				requestDuration.WithLabelValues(normalized.SourceService, normalized.DestinationService, normalized.Leg).Observe(normalized.LatencyMs / 1000.0)
@@ -110,8 +110,17 @@ func main() {
 	apiMux.HandleFunc("GET /api/v1/topology", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, store.Topology())
 	})
+	apiMux.HandleFunc("GET /api/v1/perf", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, store.Performance())
+	})
 	apiMux.HandleFunc("GET /api/v1/events", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, store.Events(r.URL.Query().Get("service")))
+		q := r.URL.Query()
+		limit, _ := strconv.Atoi(q.Get("limit"))
+		writeJSON(w, store.Events(storepkg.EventQuery{
+			Service: q.Get("service"),
+			Verdict: q.Get("verdict"),
+			Limit:   limit,
+		}))
 	})
 
 	apiMux.Handle("/", staticHandler(*webDir))

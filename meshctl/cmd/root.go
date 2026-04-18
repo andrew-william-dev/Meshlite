@@ -16,7 +16,7 @@ import (
 var (
 	sigilURL string
 	traceURL string
-	version  = "v0.5.0-mvp"
+	version  = "dev"
 )
 
 var rootCmd = &cobra.Command{

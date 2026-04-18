@@ -453,3 +453,112 @@ tbody tr:hover {
     flex-direction: column;
   }
 }
+
+/* ── Latency colour coding ─────────────────────────────────────────── */
+.latency-ok   { color: #16a34a; }
+.latency-warn { color: #d97706; }
+.latency-crit { color: #dc2626; font-weight: 600; }
+
+/* ── Log viewer ────────────────────────────────────────────────────── */
+.log-panel {
+  grid-column: 1 / -1;
+}
+
+.log-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 9999px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  background: transparent;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  color: inherit;
+}
+
+.filter-chip:hover {
+  background: rgba(148, 163, 184, 0.15);
+}
+
+.filter-chip.active {
+  background: rgba(99, 102, 241, 0.12);
+  border-color: rgba(99, 102, 241, 0.4);
+  color: #6366f1;
+}
+
+.filter-chip.ok.active  { background: rgba(22, 163, 74, 0.1); border-color: #16a34a; color: #16a34a; }
+.filter-chip.warn.active { background: rgba(217, 119, 6, 0.1); border-color: #d97706; color: #d97706; }
+
+.chip-count {
+  font-size: 0.75rem;
+  opacity: 0.7;
+}
+
+.log-table-wrap {
+  overflow-x: auto;
+}
+
+.log-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.825rem;
+}
+
+.log-table th,
+.log-table td {
+  padding: 7px 10px;
+  text-align: left;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  white-space: nowrap;
+}
+
+.log-table th {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: rgba(148, 163, 184, 0.9);
+}
+
+.log-row.verdict-deny      { background: rgba(239, 68, 68,  0.04); }
+.log-row.verdict-tls_reject,
+.log-row.verdict-error     { background: rgba(245, 158, 11, 0.04); }
+
+.log-time  { color: rgba(148, 163, 184, 0.8); font-variant-numeric: tabular-nums; }
+.log-svc   { font-weight: 500; max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+.log-reason { max-width: 220px; overflow: hidden; text-overflow: ellipsis; font-size: 0.8rem; color: rgba(148, 163, 184, 0.9); }
+
+.load-more-wrap {
+  display: flex;
+  justify-content: center;
+  margin-top: 16px;
+}
+
+.load-more {
+  padding: 8px 20px;
+  border-radius: 9999px;
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  background: transparent;
+  color: #6366f1;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.load-more:hover {
+  background: rgba(99, 102, 241, 0.08);
+}
+
+/* ── Performance panel ─────────────────────────────────────────────── */
+.perf-panel {
+  grid-column: 1 / -1;
+}
