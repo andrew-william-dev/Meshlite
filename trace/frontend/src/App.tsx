@@ -135,6 +135,21 @@ export function App() {
   const [error, setError] = useState<string>('');
   const [viewMode, setViewMode] = useState<ViewMode>('application');
   const [focusService, setFocusService] = useState<string>('all');
+  const [darkMode, setDarkMode] = useState<boolean>(() => {
+    const saved = localStorage.getItem('trace-dark-mode');
+    if (saved !== null) return saved === 'true';
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  });
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (darkMode) {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+    localStorage.setItem('trace-dark-mode', String(darkMode));
+  }, [darkMode]);
 
   useEffect(() => {
     let disposed = false;
@@ -291,6 +306,15 @@ export function App() {
         <div className="sidebar-note">
           By default Trace hides mesh internals so same-cluster and cross-cluster application journeys stand out immediately.
         </div>
+
+        <button
+          type="button"
+          className="dark-toggle"
+          onClick={() => setDarkMode((d) => !d)}
+          aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+        >
+          {darkMode ? '☀ Light mode' : '☾ Dark mode'}
+        </button>
       </aside>
 
       <main className="content">
