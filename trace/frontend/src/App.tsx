@@ -338,7 +338,6 @@ export function App() {
               />
               <EventFeed
                 events={watchlistEvents}
-                edges={visibleTopology.edges}
                 focusService={focusService === 'all' ? undefined : focusService}
               />
             </div>
