@@ -2,5 +2,5 @@ apiVersion: v2
 name: sigil
 description: Sigil — MeshLite Certificate Authority and Control Plane
 type: application
-version: 0.5.6
-appVersion: "0.5.6-alpha.2"
+version: 1.0.0
+appVersion: "1.0.0"
