@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 
 const GITHUB_API = "https://api.github.com/repos/andrew-william-dev/Meshlite/releases/latest";
@@ -14,6 +14,79 @@ function useLatestRelease() {
     return () => { active = false; };
   }, []);
   return state;
+}
+
+// ─── Doc nav context (lets doc pages navigate without prop drilling) ──────────
+const DocNavContext = createContext(() => {});
+
+// ─── Callout box ──────────────────────────────────────────────────────────────
+function Callout({ type = "note", children }) {
+  const META = {
+    tip:       { icon: "💡", label: "Tip" },
+    note:      { icon: "ℹ",  label: "Note" },
+    warning:   { icon: "⚠",  label: "Warning" },
+    important: { icon: "★",  label: "Important" },
+  };
+  const m = META[type] || META.note;
+  return (
+    <div className={`callout callout-${type}`}>
+      <span className="callout-icon">{m.icon}</span>
+      <div className="callout-content">
+        <strong className="callout-label">{m.label}</strong>
+        <div className="callout-body">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Continue reading / next-steps strip ─────────────────────────────────────
+function NextSteps({ items }) {
+  const navigate = useContext(DocNavContext);
+  return (
+    <div className="next-steps">
+      <span className="next-steps-label">Continue reading</span>
+      <div className="next-steps-grid">
+        {items.map(({ id, title, desc }) => (
+          <button
+            key={id}
+            className="next-step-card"
+            onClick={() => { navigate(id); window.scrollTo(0, 0); }}
+          >
+            <span className="nsc-arrow">→</span>
+            <div>
+              <strong>{title}</strong>
+              {desc && <span>{desc}</span>}
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Numbered step row ────────────────────────────────────────────────────────
+function DocStep({ num, title, children }) {
+  return (
+    <div className="doc-step">
+      <span className="step-num">{num}</span>
+      <div className="step-content">
+        {title && <h4>{title}</h4>}
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// ─── Prerequisites bar ────────────────────────────────────────────────────────
+function DocPrereqs({ items }) {
+  return (
+    <div className="doc-prereqs">
+      <span className="doc-prereq-label">Prerequisites</span>
+      {items.map((item) => (
+        <span key={item} className="doc-prereq">✓ {item}</span>
+      ))}
+    </div>
+  );
 }
 
 // ─── Hero Topology Canvas ─────────────────────────────────────────────────────
@@ -648,46 +721,306 @@ function HomePage({ onDocsClick }) {
 
 // ─── Docs nav map ─────────────────────────────────────────────────────────────
 const DOC_NAV = [
-  { group: "Introduction", items: [{ id: "overview", label: "Overview" }, { id: "architecture", label: "Architecture" }] },
-  { group: "Getting Started", items: [{ id: "helm-install", label: "Helm Installation" }, { id: "helm-values", label: "Helm Values Reference" }, { id: "meshctl-install", label: "Install meshctl" }] },
-  { group: "Components", items: [{ id: "sigil", label: "Sigil — Control Plane" }, { id: "kprobe", label: "Kprobe — eBPF Enforcer" }, { id: "conduit", label: "Conduit — Cross-Cluster" }, { id: "trace", label: "Trace — Observability" }] },
-  { group: "Operations", items: [{ id: "meshctl-ref", label: "meshctl Reference" }, { id: "policy", label: "Policy Model" }, { id: "multicluster", label: "Multi-Cluster Setup" }] },
+  {
+    group: "Get started",
+    items: [
+      { id: "overview",        label: "Introduction",    icon: "◎" },
+      { id: "quickstart-same", label: "Same-cluster",     icon: "\u2192", sub: "5 min" },
+      { id: "quickstart-cross",label: "Cross-cluster",    icon: "\u2197", sub: "15 min" },
+    ],
+  },
+  {
+    group: "Installation",
+    items: [
+      { id: "helm-install",    label: "Helm install",     icon: "\u229e" },
+      { id: "helm-values",     label: "Values reference", icon: "\u2261" },
+      { id: "meshctl-install", label: "Install meshctl",  icon: "\u2318" },
+    ],
+  },
+  {
+    group: "Components",
+    items: [
+      { id: "sigil",   label: "Sigil",   icon: "\u2b21", sub: "Control plane" },
+      { id: "kprobe",  label: "Kprobe",  icon: "\u25c8", sub: "eBPF enforcer" },
+      { id: "conduit", label: "Conduit", icon: "\u21c4", sub: "Cross-cluster" },
+      { id: "trace",   label: "Trace",   icon: "\u25c9", sub: "Observability" },
+    ],
+  },
+  {
+    group: "Operations",
+    items: [
+      { id: "policy",       label: "Policy model",     icon: "\u2713" },
+      { id: "multicluster", label: "Multi-cluster",    icon: "\u229e" },
+      { id: "meshctl-ref",  label: "meshctl reference",icon: "\u2318" },
+      { id: "architecture", label: "Architecture",     icon: "\u25b1" },
+    ],
+  },
 ];
 
 // ─── Doc: Overview ────────────────────────────────────────────────────────────
 function DocOverview() {
+  const navigate = useContext(DocNavContext);
+  const paths = [
+    { icon: "→", title: "Same-cluster quickstart",  desc: "mTLS identity, policy enforcement, and live observability in one cluster.", tag: "5 min",    id: "quickstart-same",  accent: "#3dd68c" },
+    { icon: "↗", title: "Cross-cluster quickstart", desc: "Connect two clusters with Sigil-backed mTLS and Conduit boundary enforcement.", tag: "15 min", id: "quickstart-cross", accent: "#6fb6ff" },
+    { icon: "◱", title: "Explore the architecture", desc: "How Sigil, Kprobe, Conduit, and Trace compose into one zero-trust platform.", tag: "Concepts", id: "architecture",     accent: "#b898ff" },
+  ];
   return (
     <article className="doc-page">
-      <h1>MeshLite Documentation</h1>
-      <p className="doc-lead">
-        MeshLite is a lightweight zero-trust networking layer for Kubernetes. mTLS service
-        identity, declarative policy enforcement, cross-cluster traffic control, and real-time
-        observability — without sidecars, complex operators, or a separate monitoring stack.
-      </p>
-      <h2>What you get</h2>
+      <div className="doc-welcome">
+        <h1>MeshLite Documentation</h1>
+        <p className="doc-lead">
+          Zero-trust networking for Kubernetes. mTLS service identity, policy enforcement,
+          cross-cluster traffic control, and real-time observability — without sidecars,
+          heavyweight operators, or a 20-pod control plane.
+        </p>
+      </div>
+      <p className="doc-pick-heading">Where do you want to start?</p>
+      <div className="doc-path-cards">
+        {paths.map((p) => (
+          <button key={p.id} className="doc-path-card" style={{ "--pca": p.accent }}
+            onClick={() => { navigate(p.id); window.scrollTo(0, 0); }}>
+            <span className="dpc-icon">{p.icon}</span>
+            <span className="dpc-tag">{p.tag}</span>
+            <strong className="dpc-title">{p.title}</strong>
+            <span className="dpc-desc">{p.desc}</span>
+            <span className="dpc-arrow">→</span>
+          </button>
+        ))}
+      </div>
+      <h2>What MeshLite gives you</h2>
       <ul>
-        <li><strong>Service identity</strong> — Sigil-issued ECDSA certificates for every workload, rotated continuously without restarts.</li>
-        <li><strong>Policy enforcement</strong> — ALLOW and DENY rules evaluated per-request, declared in a single <code>mesh.yaml</code>.</li>
-        <li><strong>Cross-cluster protection</strong> — Conduit gateways enforce mTLS at the cluster boundary with Sigil-backed identity on both sides.</li>
-        <li><strong>Real-time observability</strong> — Trace renders live topology, event feeds, and latency views without Prometheus, Kiali, or Grafana.</li>
-        <li><strong>CLI operations</strong> — meshctl covers apply, status, verify, logs, and rotate with no Go installation required.</li>
+        <li><strong>Service identity</strong> — Sigil-issued ECDSA P-256 certificates for every workload, rotated continuously without restarts.</li>
+        <li><strong>Policy enforcement</strong> — ALLOW / DENY rules evaluated per-request at the kernel layer, declared in a single <code>mesh.yaml</code>. No match defaults to <strong>DENY</strong>.</li>
+        <li><strong>Cross-cluster protection</strong> — Conduit enforces mTLS at the cluster boundary with Sigil-backed identity on both sides. Two Helm stanzas to configure.</li>
+        <li><strong>Real-time observability</strong> — Trace renders live topology, event feeds, and latency. No Prometheus, Kiali, or Grafana required.</li>
+        <li><strong>CLI operations</strong> — meshctl covers apply, status, verify, logs, and rotate. One binary, no Go required.</li>
       </ul>
       <h2>How it compares to Istio</h2>
       <table className="doc-table">
         <thead><tr><th>Dimension</th><th>MeshLite</th><th>Istio</th></tr></thead>
         <tbody>
-          <tr><td>Sidecar per pod</td><td>No — eBPF at kernel layer</td><td>Yes — Envoy proxy</td></tr>
-          <tr><td>Control plane pods</td><td>~4</td><td>~10–20 + sidecars on every workload</td></tr>
-          <tr><td>Installation</td><td>1 Helm chart</td><td>CRD bundle + Operator + injector</td></tr>
-          <tr><td>Observability</td><td>Trace built-in, no extra stack</td><td>Kiali + Prometheus + Grafana</td></tr>
-          <tr><td>Cross-cluster</td><td>Two Helm stanzas</td><td>Multi-cluster config + CA federation</td></tr>
+          <tr><td>Sidecar per pod</td><td>No — eBPF at kernel layer</td><td>Yes — Envoy proxy (60–100 MB each)</td></tr>
+          <tr><td>Control plane pods</td><td>~4</td><td>10–20 + sidecars on every workload</td></tr>
+          <tr><td>Installation</td><td>1 Helm chart, no CRD bundle</td><td>CRD bundle + Operator + injector webhook</td></tr>
+          <tr><td>Observability</td><td>Trace built-in, zero extra tools</td><td>Kiali + Prometheus + Grafana required</td></tr>
+          <tr><td>Cross-cluster</td><td>Two Helm values stanzas</td><td>Multi-cluster config + CA federation</td></tr>
+          <tr><td>Memory per workload</td><td>≈0 MB (one eBPF program per node)</td><td>60 MB+ Envoy sidecar per pod</td></tr>
         </tbody>
       </table>
-      <h2>Where to start</h2>
-      <p>New to MeshLite? Begin with <strong>Helm Installation</strong> then <strong>Install meshctl</strong>. Evaluating the architecture? Read <strong>Architecture</strong> first. Looking for a specific component? Jump to Sigil, Kprobe, Conduit, or Trace in the sidebar.</p>
+      <NextSteps items={[
+        { id: "quickstart-same",  title: "Single-cluster quickstart", desc: "Install and write your first policy." },
+        { id: "quickstart-cross", title: "Cross-cluster quickstart",  desc: "Connect two clusters with mTLS." },
+        { id: "architecture",     title: "Architecture",             desc: "How all four components fit together." },
+        { id: "helm-install",     title: "Helm install",             desc: "Full prerequisites and install options." },
+      ]} />
     </article>
   );
 }
+
+// ─── Doc: Same-cluster quickstart ────────────────────────────────────────────
+function QuickstartSame() {
+  return (
+    <article className="doc-page">
+      <span className="doc-section-badge same-cluster">✓ Same-cluster</span>
+      <div className="doc-time-badge">⏱ <span>~5 minutes</span></div>
+      <h1>Single-cluster quickstart</h1>
+      <p className="doc-lead">
+        Get mTLS service identity, declarative policy enforcement, and live observability
+        in one Kubernetes cluster — in about five minutes.
+      </p>
+      <DocPrereqs items={["Kubernetes 1.26+", "Helm 3.10+", "kubectl", "Cluster-admin access"]} />
+      <h2>Install MeshLite</h2>
+      <div className="doc-steps">
+        <DocStep num="1" title="Install the umbrella chart">
+          <pre className="codeblock"><code>{`helm upgrade --install meshlite ./charts/meshlite \\
+  --namespace meshlite-system \\
+  --create-namespace`}</code></pre>
+          <p>All four components — Sigil, Kprobe, Conduit, Trace — deploy in one namespace.</p>
+        </DocStep>
+        <DocStep num="2" title="Wait for pods to be ready">
+          <pre className="codeblock"><code>{`kubectl get pods -n meshlite-system --watch
+# All pods reach Running within ~60 s`}</code></pre>
+        </DocStep>
+        <DocStep num="3" title="Install meshctl">
+          <pre className="codeblock"><code>{`VERSION=v1.0.0
+curl -sSfL \\
+  "https://github.com/andrew-william-dev/Meshlite/releases/download/$VERSION/meshctl_${"{VERSION}"}_linux_amd64.tar.gz" \\
+  | tar -xz -C /usr/local/bin`}</code></pre>
+        </DocStep>
+        <DocStep num="4" title="Verify the platform is healthy">
+          <pre className="codeblock"><code>{`meshctl status --sigil-url http://sigil.meshlite-system:8080`}</code></pre>
+          <p>You should see all Kprobe agents and their connected node counts.</p>
+        </DocStep>
+      </div>
+      <h2>Write your first policy</h2>
+      <p>Create a <code>mesh.yaml</code> describing which service-to-service calls are allowed:</p>
+      <pre className="codeblock"><code>{`policies:
+  - from: service-frontend
+    to:   service-api
+    action: ALLOW
+
+  - from: "*"
+    to:   service-api
+    action: DENY`}</code></pre>
+      <div className="doc-steps">
+        <DocStep num="5" title="Apply the policy">
+          <pre className="codeblock"><code>{`meshctl apply -f mesh.yaml \\
+  --sigil-url http://sigil.meshlite-system:8080`}</code></pre>
+          <p>Policy is pushed to all Kprobe agents within seconds.</p>
+        </DocStep>
+        <DocStep num="6" title="Predict outcomes before you deploy">
+          <pre className="codeblock"><code>{`meshctl verify --from service-frontend --to service-api \\
+  --sigil-url http://sigil.meshlite-system:8080
+# → ALLOW
+
+meshctl verify --from unknown-svc --to service-api \\
+  --sigil-url http://sigil.meshlite-system:8080
+# → DENY`}</code></pre>
+        </DocStep>
+      </div>
+      <Callout type="tip">
+        <p>Policy is enforced in the kernel by Kprobe — before the packet reaches your application process. No userspace round-trip, no proxy overhead, no added latency on the data path.</p>
+      </Callout>
+      <h2>Open Trace</h2>
+      <div className="doc-steps">
+        <DocStep num="7" title="Port-forward the Trace dashboard">
+          <pre className="codeblock"><code>{`kubectl port-forward -n meshlite-system svc/trace 3000:3000`}</code></pre>
+          <p>Navigate to <code>http://localhost:3000</code>. Once traffic flows between your services, the topology graph, event feed, and latency metrics populate automatically.</p>
+        </DocStep>
+      </div>
+      <Callout type="note">
+        <p>No Prometheus config. No Kiali CRDs. No Grafana dashboards to import. Trace works immediately after install.</p>
+      </Callout>
+      <NextSteps items={[
+        { id: "policy",           title: "Policy model",             desc: "Evaluation order, wildcards, deny-by-default." },
+        { id: "trace",            title: "Trace reference",          desc: "Topology graph, event feed, and latency views." },
+        { id: "quickstart-cross", title: "Cross-cluster quickstart", desc: "Connect two clusters with mTLS boundary enforcement." },
+        { id: "helm-values",      title: "Helm values reference",    desc: "All available configuration keys." },
+      ]} />
+    </article>
+  );
+}
+
+// ─── Doc: Cross-cluster quickstart ───────────────────────────────────────────
+function QuickstartCross() {
+  return (
+    <article className="doc-page">
+      <span className="doc-section-badge cross-cluster">↗ Cross-cluster</span>
+      <div className="doc-time-badge">⏱ <span>~15 minutes</span></div>
+      <h1>Cross-cluster quickstart</h1>
+      <p className="doc-lead">
+        Connect two Kubernetes clusters with Sigil-issued mTLS identity, Conduit boundary
+        enforcement, and unified observability in Trace — from two Helm values files.
+      </p>
+      <DocPrereqs items={["Two Kubernetes clusters (1.26+)", "Network reachability between them (port 9000)", "Helm 3.10+", "kubectl access to both clusters"]} />
+      <Callout type="note">
+        <p><strong>One Sigil instance serves both clusters.</strong> Cluster A hosts the root CA. Both clusters trust the same authority — no separate CA federation required.</p>
+      </Callout>
+      <h2>Cluster A — primary (Sigil + Egress)</h2>
+      <p>Cluster A runs Sigil (the shared root CA), Kprobe, and Conduit Egress for outbound cross-cluster traffic.</p>
+      <pre className="codeblock"><code>{`# cluster-a-values.yaml
+sigil:
+  enabled: true
+
+kprobe:
+  cluster:
+    id: "cluster-a"
+  sigil:
+    address: "sigil.meshlite-system:8080"
+  trace:
+    address: "trace.meshlite-system:3000"
+
+conduitEgress:
+  enabled: true
+  peer:
+    address: "CLUSTER_B_IP:9000"   # NodePort or LoadBalancer IP of Cluster B`}</code></pre>
+      <div className="doc-steps">
+        <DocStep num="1" title="Install on Cluster A">
+          <pre className="codeblock"><code>{`kubectl config use-context <cluster-a-context>
+
+helm upgrade --install meshlite ./charts/meshlite \\
+  --namespace meshlite-system --create-namespace \\
+  -f cluster-a-values.yaml`}</code></pre>
+        </DocStep>
+        <DocStep num="2" title="Note Sigil's address for Cluster B">
+          <pre className="codeblock"><code>{`kubectl get svc sigil -n meshlite-system
+# Note the ClusterIP or LoadBalancer IP — needed in step 3`}</code></pre>
+        </DocStep>
+      </div>
+      <h2>Cluster B — remote (Ingress only)</h2>
+      <p>Cluster B runs Kprobe and Conduit Ingress. Sigil is disabled — it points at Cluster A's instance.</p>
+      <pre className="codeblock"><code>{`# cluster-b-values.yaml
+sigil:
+  enabled: false                     # Sigil lives in Cluster A
+
+kprobe:
+  cluster:
+    id: "cluster-b"
+  sigil:
+    address: "CLUSTER_A_SIGIL_IP:8080"
+  trace:
+    address: "CLUSTER_A_TRACE_IP:3000"
+
+conduitIngress:
+  enabled: true
+  clusterIdentity: "cluster-b"`}</code></pre>
+      <div className="doc-steps">
+        <DocStep num="3" title="Install on Cluster B">
+          <pre className="codeblock"><code>{`kubectl config use-context <cluster-b-context>
+
+helm upgrade --install meshlite ./charts/meshlite \\
+  --namespace meshlite-system --create-namespace \\
+  -f cluster-b-values.yaml`}</code></pre>
+        </DocStep>
+        <DocStep num="4" title="Verify both agents appear in Sigil">
+          <pre className="codeblock"><code>{`kubectl config use-context <cluster-a-context>
+
+meshctl status --sigil-url http://sigil.meshlite-system:8080
+# Agents from cluster-a and cluster-b should both appear`}</code></pre>
+        </DocStep>
+        <DocStep num="5" title="Apply cross-cluster policy">
+          <pre className="codeblock"><code>{`# mesh.yaml
+policies:
+  - from: service-a    # running in cluster-a
+    to:   service-b    # running in cluster-b
+    action: ALLOW
+
+meshctl apply -f mesh.yaml \\
+  --sigil-url http://sigil.meshlite-system:8080`}</code></pre>
+        </DocStep>
+        <DocStep num="6" title="Verify and view in Trace">
+          <pre className="codeblock"><code>{`meshctl verify --from service-a --to service-b \\
+  --sigil-url http://sigil.meshlite-system:8080
+# → ALLOW
+
+# Open Trace — cross-cluster edges appear in the "Cross-cluster" view
+kubectl port-forward -n meshlite-system svc/trace 3000:3000`}</code></pre>
+        </DocStep>
+      </div>
+      <Callout type="tip">
+        <p>In Trace, switch to the <strong>Cross-cluster</strong> view to isolate traffic that traverses cluster boundaries. Each edge shows the origin cluster ID, latency, and request count.</p>
+      </Callout>
+      <h2>Networking requirements</h2>
+      <p>Conduit Egress in Cluster A must reach Conduit Ingress in Cluster B on port 9000. Supported methods:</p>
+      <ul>
+        <li>NodePort service exposed on Cluster B's nodes</li>
+        <li>LoadBalancer service with a routable external IP on Cluster B</li>
+        <li>VPN or VPC peering between the node networks of both clusters</li>
+      </ul>
+      <Callout type="warning">
+        <p>Both clusters need network-level reachability on port 9000. Check firewall rules, security groups, and Kubernetes NetworkPolicy if connectivity tests fail.</p>
+      </Callout>
+      <NextSteps items={[
+        { id: "multicluster", title: "Multi-cluster reference", desc: "Full topology options and advanced config." },
+        { id: "conduit",      title: "Conduit deep-dive",       desc: "Egress/ingress modes and identity model." },
+        { id: "trace",        title: "Trace reference",         desc: "How cross-cluster edges are tagged." },
+        { id: "policy",       title: "Policy model",            desc: "Cross-cluster policy evaluation." },
+      ]} />
+    </article>
+  );
+}
+
 
 // ─── Doc: Architecture ────────────────────────────────────────────────────────
 function DocArchitecture() {
@@ -1121,6 +1454,7 @@ meshctl verify --from service-a --to service-b \\
 
 const DOC_MAP = {
   overview: DocOverview, architecture: DocArchitecture,
+  "quickstart-same": QuickstartSame, "quickstart-cross": QuickstartCross,
   "helm-install": DocHelmInstall, "helm-values": DocHelmValues, "meshctl-install": DocMeshctlInstall,
   sigil: DocSigil, kprobe: DocKprobe, conduit: DocConduit, trace: DocTrace,
   "meshctl-ref": DocMeshctlRef, policy: DocPolicy, multicluster: DocMultiCluster,
@@ -1128,18 +1462,44 @@ const DOC_MAP = {
 
 // ─── Docs shell ───────────────────────────────────────────────────────────────
 function DocSidebar({ current, onChange }) {
+  const [query, setQuery] = useState("");
+  const filtered = useMemo(() => {
+    if (!query.trim()) return DOC_NAV;
+    const q = query.toLowerCase();
+    return DOC_NAV
+      .map((g) => ({
+        ...g,
+        items: g.items.filter((it) =>
+          it.label.toLowerCase().includes(q) || (it.sub || "").toLowerCase().includes(q)
+        ),
+      }))
+      .filter((g) => g.items.length > 0);
+  }, [query]);
+
   return (
     <nav className="doc-sidebar">
-      {DOC_NAV.map(({ group, items }) => (
+      <div className="doc-search-wrap">
+        <input
+          className="doc-search-input"
+          type="search"
+          placeholder="Search docs…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          aria-label="Search documentation"
+        />
+      </div>
+      {filtered.map(({ group, items }) => (
         <div className="doc-nav-group" key={group}>
           <span className="doc-group-label">{group}</span>
-          {items.map(({ id, label }) => (
+          {items.map(({ id, label, icon, sub }) => (
             <button
               key={id}
               className={`doc-nav-btn${current === id ? " active" : ""}`}
               onClick={() => { onChange(id); window.scrollTo(0, 0); }}
             >
-              {label}
+              {icon && <span className="doc-nav-icon">{icon}</span>}
+              <span className="doc-nav-label">{label}</span>
+              {sub && <span className="doc-nav-sub">{sub}</span>}
             </button>
           ))}
         </div>
@@ -1165,20 +1525,22 @@ function DocsPage() {
   }, [section]);
 
   return (
-    <div className="docs-layout">
-      <DocSidebar current={section} onChange={setSection} />
-      <main className="docs-content" ref={contentRef}>
-        <Content />
-      </main>
-      {headings.length > 0 && (
-        <aside className="docs-toc">
-          <span className="toc-label">On this page</span>
-          {headings.map((h) => (
-            <a key={h.id} href={`#${h.id}`} className="toc-link">{h.text}</a>
-          ))}
-        </aside>
-      )}
-    </div>
+    <DocNavContext.Provider value={setSection}>
+      <div className="docs-layout">
+        <DocSidebar current={section} onChange={setSection} />
+        <main className="docs-content" ref={contentRef}>
+          <Content />
+        </main>
+        {headings.length > 0 && (
+          <aside className="docs-toc">
+            <span className="toc-label">On this page</span>
+            {headings.map((h) => (
+              <a key={h.id} href={`#${h.id}`} className="toc-link">{h.text}</a>
+            ))}
+          </aside>
+        )}
+      </div>
+    </DocNavContext.Provider>
   );
 }
 
