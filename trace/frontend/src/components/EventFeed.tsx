@@ -20,7 +20,7 @@ function verdictTone(verdict: string) {
 
 export function EventFeed({ events, focusService }: Props) {
   return (
-    <div className="panel">
+    <div className={`panel${events.length > 0 ? ' panel-alert' : ''}`}>
       <div className="panel-header">
         <div>
           <h3>Operational watchlist</h3>

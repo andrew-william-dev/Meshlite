@@ -23,34 +23,40 @@ const emptyTopology: Topology = {
   edges: [],
 };
 
-const viewOptions: Array<{ id: ViewMode; label: string; description: string }> = [
+const viewOptions: Array<{ id: ViewMode; icon: string; label: string; description: string }> = [
   {
     id: 'application',
+    icon: '↔',
     label: 'App traffic',
     description: 'Hide mesh and cluster chatter so user journeys stay readable.',
   },
   {
     id: 'crossCluster',
+    icon: '↗',
     label: 'Cross-cluster',
     description: 'Show only calls that traverse cluster boundaries.',
   },
   {
     id: 'policy',
+    icon: '⚠',
     label: 'Risk events',
     description: 'Focus on denials, TLS failures, and delivery problems.',
   },
   {
     id: 'platform',
+    icon: '⚙',
     label: 'Platform',
     description: 'Include mesh internals and infrastructure traffic when needed.',
   },
   {
     id: 'logs',
+    icon: '☰',
     label: 'Request log',
     description: 'Full paginated request log with verdict filtering.',
   },
   {
     id: 'performance',
+    icon: '⚡',
     label: 'Performance',
     description: 'Per-path latency percentiles sorted by worst p99.',
   },
@@ -129,6 +135,21 @@ export function App() {
   const [error, setError] = useState<string>('');
   const [viewMode, setViewMode] = useState<ViewMode>('application');
   const [focusService, setFocusService] = useState<string>('all');
+  const [darkMode, setDarkMode] = useState<boolean>(() => {
+    const saved = localStorage.getItem('trace-dark-mode');
+    if (saved !== null) return saved === 'true';
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  });
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (darkMode) {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+    localStorage.setItem('trace-dark-mode', String(darkMode));
+  }, [darkMode]);
 
   useEffect(() => {
     let disposed = false;
@@ -231,7 +252,7 @@ export function App() {
   const isFullWidthView = viewMode === 'logs' || viewMode === 'performance';
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell view-${viewMode}`}>
       <aside className="sidebar">
         <div>
           <div className="brand-kicker">MeshLite</div>
@@ -249,7 +270,10 @@ export function App() {
                 className={`sidebar-button ${viewMode === option.id ? 'active' : ''}`}
                 onClick={() => setViewMode(option.id)}
               >
-                <strong>{option.label}</strong>
+                <div className="sbtn-row">
+                  <span className="sbtn-icon">{option.icon}</span>
+                  <strong>{option.label}</strong>
+                </div>
                 <span>{option.description}</span>
               </button>
             ))}
@@ -282,12 +306,22 @@ export function App() {
         <div className="sidebar-note">
           By default Trace hides mesh internals so same-cluster and cross-cluster application journeys stand out immediately.
         </div>
+
+        <button
+          type="button"
+          className="dark-toggle"
+          onClick={() => setDarkMode((d) => !d)}
+          aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+        >
+          {darkMode ? '☀ Light mode' : '☾ Dark mode'}
+        </button>
       </aside>
 
       <main className="content">
         <header className="topbar">
           <div>
-            <h1>Service journey dashboard</h1>
+            <p className="topbar-kicker">MeshLite Trace</p>
+            <h1>{activeView.icon} {activeView.label}</h1>
             <p>{activeView.description}</p>
           </div>
           <div className="topbar-status">
@@ -307,7 +341,7 @@ export function App() {
             <section className="hero-strip">
               <div className="hero-card">
                 <span className="eyebrow">Current lens</span>
-                <strong>{activeView.label}</strong>
+                <strong>{activeView.icon} {activeView.label}</strong>
                 <p>{activeView.description}</p>
               </div>
               <div className="hero-card">

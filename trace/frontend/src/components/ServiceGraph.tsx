@@ -8,6 +8,7 @@ type Props = {
 };
 
 export function ServiceGraph({ topology, viewLabel, focusService }: Props) {
+  const isDark = document.documentElement.classList.contains('dark');
   if (topology.nodes.length === 0 || topology.edges.length === 0) {
     return (
       <div className="panel empty-state">
@@ -37,19 +38,33 @@ export function ServiceGraph({ topology, viewLabel, focusService }: Props) {
       data: {
         label: node.cluster_id ? `${node.label}\n${node.cluster_id}` : node.label,
       },
-      style: {
-        background: isFocused ? '#dbeafe' : '#fff',
-        color: '#0f172a',
-        border: isFocused ? '2px solid #2563eb' : '1px solid #cbd5e1',
-        borderRadius: 16,
-        padding: 12,
-        minWidth: 180,
-        fontWeight: 700,
-        whiteSpace: 'pre-line',
-        boxShadow: isFocused
-          ? '0 10px 24px rgba(37, 99, 235, 0.18)'
-          : '0 8px 20px rgba(15, 23, 42, 0.08)',
-      },
+      style: isDark
+        ? {
+            background: isFocused ? 'rgba(96, 165, 250, 0.18)' : '#1c2333',
+            color: '#e6edf3',
+            border: isFocused ? '2px solid #60a5fa' : '1px solid #30363d',
+            borderRadius: 16,
+            padding: 12,
+            minWidth: 180,
+            fontWeight: 700,
+            whiteSpace: 'pre-line',
+            boxShadow: isFocused
+              ? '0 10px 24px rgba(96, 165, 250, 0.25)'
+              : '0 8px 20px rgba(0, 0, 0, 0.3)',
+          }
+        : {
+            background: isFocused ? '#dbeafe' : '#fff',
+            color: '#0f172a',
+            border: isFocused ? '2px solid #2563eb' : '1px solid #cbd5e1',
+            borderRadius: 16,
+            padding: 12,
+            minWidth: 180,
+            fontWeight: 700,
+            whiteSpace: 'pre-line',
+            boxShadow: isFocused
+              ? '0 10px 24px rgba(37, 99, 235, 0.18)'
+              : '0 8px 20px rgba(15, 23, 42, 0.08)',
+          },
     };
   });
 
@@ -75,7 +90,7 @@ export function ServiceGraph({ topology, viewLabel, focusService }: Props) {
         strokeWidth: Math.min(6, Math.max(2.5, edge.requests / 12 + 2)),
       },
       labelStyle: {
-        fill: '#0f172a',
+        fill: isDark ? '#e6edf3' : '#0f172a',
         fontWeight: 700,
         fontSize: 12,
       },
