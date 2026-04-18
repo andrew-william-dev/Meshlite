@@ -1,21 +1,11 @@
 import type { Summary, TopologyEdge } from '../lib/api';
+import { formatTimestamp } from '../lib/utils';
 
 type Props = {
   summary: Summary;
   edges: TopologyEdge[];
   viewLabel: string;
 };
-
-function formatTimestamp(value?: string) {
-  if (!value) {
-    return 'Waiting for traffic';
-  }
-
-  const timestamp = new Date(value);
-  return Number.isNaN(timestamp.getTime())
-    ? 'Waiting for traffic'
-    : timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-}
 
 function getHealth(edge: TopologyEdge) {
   const issues = edge.deny_count + edge.tls_rejects + edge.error_count;
